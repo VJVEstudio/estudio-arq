@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { get, post, put, del } from '../lib/api';
 
-export function useEgresos(filtros = {}) {
-  const [egresos,  setEgresos]  = useState([]);
+export function useIngresos(filtros = {}) {
+  const [ingresos, setIngresos] = useState([]);
   const [resumen,  setResumen]  = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error,    setError]    = useState(null);
@@ -14,10 +14,10 @@ export function useEgresos(filtros = {}) {
       const params = new URLSearchParams();
       Object.entries(filtros).forEach(([k, v]) => { if (v) params.set(k, v); });
       const [data, res] = await Promise.all([
-        get(`/egresos?${params}`),
-        get(`/egresos/resumen?${params}`),
+        get(`/ingresos?${params}`),
+        get(`/ingresos/resumen?${params}`),
       ]);
-      setEgresos(data);
+      setIngresos(data);
       setResumen(res);
     } catch (err) { setError(err.message); }
     finally { setCargando(false); }
@@ -27,44 +27,22 @@ export function useEgresos(filtros = {}) {
   useEffect(() => { cargar(); }, [cargar]);
 
   const crear = async (datos) => {
-    const n = await post('/egresos', datos);
-    setEgresos(prev => [n, ...prev]);
+    const nuevo = await post('/ingresos', datos);
+    setIngresos(prev => [nuevo, ...prev]);
     await cargar();
-    return n;
+    return nuevo;
   };
   const actualizar = async (id, datos) => {
-    const u = await put(`/egresos/${id}`, datos);
-    setEgresos(prev => prev.map(e => e.id === id ? u : e));
+    const u = await put(`/ingresos/${id}`, datos);
+    setIngresos(prev => prev.map(i => i.id === id ? u : i));
     await cargar();
     return u;
   };
   const eliminar = async (id) => {
-    await del(`/egresos/${id}`);
-    setEgresos(prev => prev.filter(e => e.id !== id));
+    await del(`/ingresos/${id}`);
+    setIngresos(prev => prev.filter(i => i.id !== id));
     await cargar();
   };
 
-  return { egresos, resumen, cargando, error, cargar, crear, actualizar, eliminar };
-}
-
-export function useDestinatarios() {
-  const [destinatarios, setDestinatarios] = useState([]);
-  const [cargando,      setCargando]      = useState(true);
-
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    try { setDestinatarios(await get('/destinatarios')); }
-    catch { }
-    finally { setCargando(false); }
-  }, []);
-
-  useEffect(() => { cargar(); }, [cargar]);
-
-  const crear = async (datos) => {
-    const nuevo = await post('/destinatarios', datos);
-    setDestinatarios(prev => [...prev, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre)));
-    return nuevo;
-  };
-
-  return { destinatarios, cargando, cargar, crear };
+  return { ingresos, resumen, cargando, error, cargar, crear, actualizar, eliminar };
 }
