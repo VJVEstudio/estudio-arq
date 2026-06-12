@@ -45,13 +45,11 @@ router.get('/:id', async (req, res) => {
             c.cuit AS cliente_cuit,
             c.email AS cliente_email,
             COALESCE(
-              json_agg(
-                json_build_object(
-                  'id', d.id,
-                  'nombre', d.nombre,
-                  'fecha_asignacion', pd.fecha_asignacion
-                )
-              ) FILTER (WHERE d.id IS NOT NULL AND pd.activo = TRUE),
+              json_agg(json_build_object(
+                'id', d.id,
+                'nombre', d.nombre,
+                'fecha_asignacion', pd.fecha_asignacion
+              )) FILTER (WHERE d.id IS NOT NULL AND pd.activo = TRUE),
               '[]'
             ) AS dibujantes
      FROM proyectos p
@@ -92,4 +90,56 @@ router.post('/', auth.soloAdmin, async (req, res) => {
 
 router.put('/:id', auth.soloAdmin, async (req, res) => {
   const { cliente_id, nombre, descripcion, estado, fecha_inicio, fecha_cierre_estimada, notas_internas } = req.body;
-  if (!nombre?.trim()) return res.status(400).json({
+  if (!nombre?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
+  const { rows } = await query(
+    `UPDATE proyectos
+     SET cliente_id = $1, nombre = $2, descripcion = $3, estado = $4,
+         fecha_inicio = $5, fecha_cierre_estimada = $6, notas_internas = $7,
+         updated_at = NOW()
+     WHERE id = $8 RETURNING *`,
+    [cliente_id, nombre.trim(), descripcion || null,
+     estado || 'activo', fecha_inicio, fecha_cierre_estimada || null,
+     notas_internas || null, req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Proyecto no encontrado' });
+  res.json(rows[0]);
+});
+
+router.patch('/:id/estado', auth.soloAdmin, async (req, res) => {
+  const { estado } = req.body;
+  const estadosValidos = ['activo', 'pausado', 'finalizado'];
+  if (!estadosValidos.includes(estado)) {
+    return res.status(400).json({ error: `Estado debe ser: ${estadosValidos.join(', ')}` });
+  }
+  const { rows } = await query(
+    `UPDATE proyectos SET estado = $1, updated_at = NOW() WHERE id = $2 RETURNING id, nombre, estado`,
+    [estado, req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Proyecto no encontrado' });
+  res.json(rows[0]);
+});
+
+router.post('/:id/dibujantes', auth.soloAdmin, async (req, res) => {
+  const { dibujante_id } = req.body;
+  if (!dibujante_id) return res.status(400).json({ error: 'dibujante_id es obligatorio' });
+  const { rows } = await query(
+    `INSERT INTO proyecto_dibujantes (proyecto_id, dibujante_id)
+     VALUES ($1, $2)
+     ON CONFLICT (proyecto_id, dibujante_id)
+     DO UPDATE SET activo = TRUE, fecha_asignacion = CURRENT_DATE
+     RETURNING *`,
+    [req.params.id, dibujante_id]
+  );
+  res.status(201).json(rows[0]);
+});
+
+router.delete('/:id/dibujantes/:dibujante_id', auth.soloAdmin, async (req, res) => {
+  await query(
+    `UPDATE proyecto_dibujantes SET activo = FALSE
+     WHERE proyecto_id = $1 AND dibujante_id = $2`,
+    [req.params.id, req.params.dibujante_id]
+  );
+  res.status(204).send();
+});
+
+module.exports = router;
