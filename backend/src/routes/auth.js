@@ -40,7 +40,11 @@ router.post('/login', async (req, res) => {
     const usuario = rows[0];
     if (!usuario) return res.status(401).json({ error: 'Credenciales incorrectas' });
     if (!usuario.activo) return res.status(403).json({ error: 'Usuario desactivado.' });
-    const passwordValida = await bcrypt.compare(password, usuario.password_hash);
+    const { rows: pwCheck } = await query(
+  `SELECT (password_hash = crypt($1, password_hash)) AS valida FROM usuarios WHERE id = $2`,
+  [password, usuario.id]
+);
+const passwordValida = pwCheck[0]?.valida;
     if (!passwordValida) return res.status(401).json({ error: 'Credenciales incorrectas' });
     const accessToken  = generarAccessToken(usuario);
     const refreshToken = generarRefreshToken(usuario);
