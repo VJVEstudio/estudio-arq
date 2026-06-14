@@ -34,20 +34,20 @@ function Sidebar({ colapsado, onToggle }) {
       flexShrink: 0, position: 'sticky', top: 0, zIndex: 100,
     }}>
       <div style={{
-        padding: colapsado ? '20px 0' : '20px', borderBottom: '1px solid rgba(255,255,255,0.08)',
+        padding: colapsado ? '20px 0' : '20px', borderBottom: '1px solid rgba(255,255,255,0.15)',
         display: 'flex', alignItems: 'center',
         justifyContent: colapsado ? 'center' : 'space-between', minHeight: 64,
       }}>
         {!colapsado && (
-  <div>
-    <img src="/logo_vjv.jpg" alt="VJV" style={{ width: '48px', marginBottom: '8px', borderRadius: '4px' }} />
-    <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>VJV Arquitectos</p>
-    <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>Panel de gestión</p>
-  </div>
-)}
+          <div>
+            <img src="/logo-vjv.jpg" alt="VJV" style={{ width: '52px', marginBottom: '8px', borderRadius: '4px', display: 'block' }} />
+            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>VJV Arquitectos</p>
+            <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>Panel de gestión</p>
+          </div>
+        )}
         <button onClick={onToggle} style={{
-          background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '6px',
-          color: 'rgba(255,255,255,0.7)', cursor: 'pointer', padding: '6px 8px',
+          background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '6px',
+          color: 'white', cursor: 'pointer', padding: '6px 8px',
           fontSize: '14px', lineHeight: 1,
         }}>
           {colapsado ? '→' : '←'}
@@ -61,7 +61,7 @@ function Sidebar({ colapsado, onToggle }) {
               <p style={{
                 margin: '12px 20px 4px', fontSize: '10px', fontWeight: 600,
                 textTransform: 'uppercase', letterSpacing: '0.08em',
-                color: 'rgba(255,255,255,0.3)',
+                color: 'rgba(255,255,255,0.5)',
               }}>{grupo.grupo}</p>
             )}
             {grupo.items.map(item => (
@@ -72,10 +72,10 @@ function Sidebar({ colapsado, onToggle }) {
                   justifyContent: colapsado ? 'center' : 'flex-start',
                   padding: colapsado ? '10px 0' : '9px 20px',
                   margin: '1px 8px', borderRadius: '8px',
-                  color: isActive ? 'white' : 'rgba(255,255,255,0.6)',
-                  background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                  color: isActive ? 'white' : 'rgba(255,255,255,0.85)',
+                  background: isActive ? 'rgba(255,255,255,0.2)' : 'transparent',
                   textDecoration: 'none', fontSize: '14px',
-                  fontWeight: isActive ? 500 : 400,
+                  fontWeight: isActive ? 600 : 400,
                 })}>
                 <span style={{ fontSize: colapsado ? '18px' : '15px', minWidth: 20, textAlign: 'center' }}>
                   {item.icono}
@@ -88,9 +88,9 @@ function Sidebar({ colapsado, onToggle }) {
       </nav>
 
       {!colapsado && (
-        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.25)' }}>
-            v1.0 · Estudio Arq. Hospitalaria
+        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+          <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+            v1.0 · VJV Arquitectos
           </p>
         </div>
       )}
