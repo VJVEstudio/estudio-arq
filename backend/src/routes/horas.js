@@ -131,5 +131,102 @@ router.delete('/:id', async (req, res) => {
   await query(`DELETE FROM horas_dibujantes WHERE id=$1`, [req.params.id]);
   res.status(204).send();
 });
+// ── GET /api/horas/liquidaciones ──────────────────────────────────────────────
+// Resumen de horas por dibujante y mes para liquidar
+router.get('/pendientes', auth.soloAdmin, async (req, res) => {
+  const { rows } = await query(`
+    SELECT
+      d.id AS dibujante_id,
+      d.nombre AS dibujante_nombre,
+      DATE_TRUNC('month', h.fecha) AS mes,
+      EXTRACT(MONTH FROM h.fecha) AS numero_mes,
+      EXTRACT(YEAR FROM h.fecha) AS anio,
+      SUM(h.horas) AS horas_totales,
+      SUM(h.costo_total) AS monto_total,
+      COUNT(h.id) AS registros
+    FROM horas_dibujantes h
+    JOIN dibujantes d ON d.id = h.dibujante_id
+    WHERE h.liquidada = FALSE
+    GROUP BY d.id, d.nombre, DATE_TRUNC('month', h.fecha),
+             EXTRACT(MONTH FROM h.fecha), EXTRACT(YEAR FROM h.fecha)
+    ORDER BY mes DESC, d.nombre ASC
+  `);
+  res.json(rows);
+});
 
+// ── POST /api/horas/liquidar ──────────────────────────────────────────────────
+// Liquidar horas de un dibujante en un mes específico
+router.post('/liquidar', auth.soloAdmin, async (req, res) => {
+  const { dibujante_id, mes, anio, destinatario_id, pagado_por_estudio, socio_id } = req.body;
+
+  if (!dibujante_id || !mes || !anio) {
+    return res.status(400).json({ error: 'dibujante_id, mes y anio son obligatorios' });
+  }
+
+  const { pool } = require('../db');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Obtener horas pendientes del período
+    const { rows: horas } = await client.query(`
+      SELECT id, horas, costo_total FROM horas_dibujantes
+      WHERE dibujante_id = $1
+        AND EXTRACT(MONTH FROM fecha) = $2
+        AND EXTRACT(YEAR FROM fecha) = $3
+        AND liquidada = FALSE
+    `, [dibujante_id, mes, anio]);
+
+    if (!horas.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'No hay horas pendientes para ese período' });
+    }
+
+    const horas_totales = horas.reduce((s, h) => s + Number(h.horas), 0);
+    const monto_total   = horas.reduce((s, h) => s + Number(h.costo_total), 0);
+
+    // 2. Crear el egreso
+    const { rows: [egreso] } = await client.query(`
+      INSERT INTO egresos
+        (destinatario_id, categoria, monto, moneda, pagado_por_estudio, socio_id, fecha, descripcion)
+      VALUES ($1, 'dibujantes', $2, 'ARS', $3, $4, CURRENT_DATE, $5)
+      RETURNING *
+    `, [
+      destinatario_id,
+      monto_total,
+      pagado_por_estudio ?? true,
+      pagado_por_estudio ? null : socio_id,
+      `Honorarios dibujante — ${mes}/${anio}`,
+    ]);
+
+    // 3. Distribuir el egreso entre socios
+    await client.query(`SELECT distribuir_egreso($1)`, [egreso.id]);
+
+    // 4. Crear registro de liquidación
+    const { rows: [liquidacion] } = await client.query(`
+      INSERT INTO liquidaciones_dibujantes
+        (dibujante_id, mes, anio, horas_totales, monto_total, egreso_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [dibujante_id, mes, anio, horas_totales, monto_total, egreso.id]);
+
+    // 5. Marcar horas como liquidadas
+    const ids = horas.map(h => h.id);
+    await client.query(`
+      UPDATE horas_dibujantes
+      SET liquidada = TRUE, liquidacion_id = $1
+      WHERE id = ANY($2)
+    `, [liquidacion.id, ids]);
+
+    await client.query('COMMIT');
+    res.status(201).json({ liquidacion, egreso, horas_totales, monto_total });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error liquidando horas:', err);
+    res.status(500).json({ error: 'Error al liquidar las horas' });
+  } finally {
+    client.release();
+  }
+});
 module.exports = router;
