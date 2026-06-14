@@ -104,85 +104,86 @@ router.get('/proyecto/:id/csv', async (req, res) => {
 
 router.get('/general', async (req, res) => {
   const { desde, hasta } = req.query;
-  const condFecha = (t) => {
-    const c = [];
-    if (desde) c.push(`${t}.fecha >= '${desde}'`);
-    if (hasta) c.push(`${t}.fecha <= '${hasta}'`);
-    return c.length ? 'AND ' + c.join(' AND ') : '';
-  };
+
+  const condFechaI = desde || hasta ? `AND ${desde ? `i.fecha >= '${desde}'` : 'TRUE'} ${hasta ? `AND i.fecha <= '${hasta}'` : ''}` : '';
+  const condFechaE = desde || hasta ? `AND ${desde ? `e.fecha >= '${desde}'` : 'TRUE'} ${hasta ? `AND e.fecha <= '${hasta}'` : ''}` : '';
+  const condFechaH = desde || hasta ? `AND ${desde ? `h.fecha >= '${desde}'` : 'TRUE'} ${hasta ? `AND h.fecha <= '${hasta}'` : ''}` : '';
+
   const { rows: ingresosResumen } = await query(
     `SELECT moneda, tipo, COUNT(*) AS cantidad, SUM(monto) AS total
-     FROM ingresos WHERE TRUE ${condFecha('ingresos')}
+     FROM ingresos WHERE TRUE ${condFechaI.replace(/^AND /, 'AND ')}
      GROUP BY moneda, tipo ORDER BY moneda, tipo`
   );
+
   const { rows: egresosResumen } = await query(
     `SELECT moneda, categoria, COUNT(*) AS cantidad, SUM(monto) AS total
-     FROM egresos WHERE TRUE ${condFecha('egresos')}
+     FROM egresos WHERE TRUE ${condFechaE.replace(/^AND /, 'AND ')}
      GROUP BY moneda, categoria ORDER BY moneda, total DESC`
   );
+
   const { rows: porProyecto } = await query(
     `SELECT p.id, p.nombre AS proyecto, c.nombre_razon_social AS cliente, p.estado,
-            COALESCE(SUM(i.monto) FILTER (WHERE i.moneda='ARS'), 0) AS ingresos_ars,
-            COALESCE(SUM(i.monto) FILTER (WHERE i.moneda='USD'), 0) AS ingresos_usd,
-            COALESCE(SUM(e.monto) FILTER (WHERE e.moneda='ARS'), 0) AS egresos_ars,
-            COALESCE(SUM(e.monto) FILTER (WHERE e.moneda='USD'), 0) AS egresos_usd,
-            COALESCE(SUM(h.costo_total), 0) AS costo_horas,
-            COALESCE(SUM(h.horas), 0)       AS horas_totales
+            COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'ARS' ${desde ? `AND i2.fecha >= '${desde}'` : ''} ${hasta ? `AND i2.fecha <= '${hasta}'` : ''}), 0) AS ingresos_ars,
+            COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'USD' ${desde ? `AND i2.fecha >= '${desde}'` : ''} ${hasta ? `AND i2.fecha <= '${hasta}'` : ''}), 0) AS ingresos_usd,
+            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'ARS' ${desde ? `AND e2.fecha >= '${desde}'` : ''} ${hasta ? `AND e2.fecha <= '${hasta}'` : ''}), 0) AS egresos_ars,
+            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'USD' ${desde ? `AND e2.fecha >= '${desde}'` : ''} ${hasta ? `AND e2.fecha <= '${hasta}'` : ''}), 0) AS egresos_usd,
+            COALESCE((SELECT SUM(h2.costo_total) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${desde ? `AND h2.fecha >= '${desde}'` : ''} ${hasta ? `AND h2.fecha <= '${hasta}'` : ''}), 0) AS costo_horas,
+            COALESCE((SELECT SUM(h2.horas) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${desde ? `AND h2.fecha >= '${desde}'` : ''} ${hasta ? `AND h2.fecha <= '${hasta}'` : ''}), 0) AS horas_totales
      FROM proyectos p
      JOIN clientes c ON c.id = p.cliente_id
-     LEFT JOIN ingresos i ON i.proyecto_id = p.id ${condFecha('i')}
-     LEFT JOIN egresos  e ON e.proyecto_id = p.id ${condFecha('e')}
-     LEFT JOIN horas_dibujantes h ON h.proyecto_id = p.id ${condFecha('h')}
      GROUP BY p.id, p.nombre, c.nombre_razon_social, p.estado
-     ORDER BY (COALESCE(SUM(i.monto),0) - COALESCE(SUM(e.monto),0)) DESC`
+     ORDER BY ingresos_ars DESC`
   );
+
   const { rows: porCliente } = await query(
     `SELECT c.nombre_razon_social AS cliente,
             SUM(i.monto) FILTER (WHERE i.moneda='ARS') AS total_ars,
             SUM(i.monto) FILTER (WHERE i.moneda='USD') AS total_usd,
             COUNT(DISTINCT i.proyecto_id) AS proyectos
      FROM ingresos i JOIN clientes c ON c.id = i.cliente_id
-     WHERE TRUE ${condFecha('i')}
+     WHERE TRUE ${condFechaI.replace(/^AND /, 'AND ')}
      GROUP BY c.id, c.nombre_razon_social ORDER BY total_ars DESC NULLS LAST`
   );
+
   const { rows: porDibujante } = await query(
     `SELECT d.nombre AS dibujante,
             SUM(h.horas) AS horas_totales, SUM(h.costo_total) AS costo_total,
             COUNT(DISTINCT h.proyecto_id) AS proyectos
      FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id
-     WHERE TRUE ${condFecha('h')}
+     WHERE TRUE ${condFechaH.replace(/^AND /, 'AND ')}
      GROUP BY d.id, d.nombre ORDER BY horas_totales DESC`
   );
+
   const { rows: balanceSocios } = await query(`SELECT * FROM v_balance_socios`);
+
   res.json({
     periodo: { desde: desde || null, hasta: hasta || null },
-    ingresos: ingresosResumen, egresos: egresosResumen,
-    por_proyecto: porProyecto, por_cliente: porCliente,
-    por_dibujante: porDibujante, balance_socios: balanceSocios,
+    ingresos: ingresosResumen,
+    egresos: egresosResumen,
+    por_proyecto: porProyecto,
+    por_cliente: porCliente,
+    por_dibujante: porDibujante,
+    balance_socios: balanceSocios,
   });
 });
 
 router.get('/general/csv', async (req, res) => {
   const { desde, hasta } = req.query;
-  const cond = [];
-  if (desde) cond.push(`fecha >= '${desde}'`);
-  if (hasta) cond.push(`fecha <= '${hasta}'`);
-  const where = cond.length ? 'WHERE ' + cond.join(' AND ') : '';
+  const condI = desde || hasta ? `WHERE ${desde ? `i.fecha >= '${desde}'` : 'TRUE'} ${hasta ? `AND i.fecha <= '${hasta}'` : ''}` : '';
+  const condE = desde || hasta ? `WHERE ${desde ? `e.fecha >= '${desde}'` : 'TRUE'} ${hasta ? `AND e.fecha <= '${hasta}'` : ''}` : '';
   const { rows: ingresos } = await query(
     `SELECT i.fecha, 'Ingreso' AS tipo, c.nombre_razon_social AS cliente,
             p.nombre AS proyecto, i.moneda, i.monto, i.tipo AS subtipo,
             i.comprobante, i.descripcion
      FROM ingresos i JOIN clientes c ON c.id=i.cliente_id
-     LEFT JOIN proyectos p ON p.id=i.proyecto_id
-     ${where.replace('fecha', 'i.fecha')}`
+     LEFT JOIN proyectos p ON p.id=i.proyecto_id ${condI}`
   );
   const { rows: egresos } = await query(
     `SELECT e.fecha, 'Egreso' AS tipo, d.nombre AS cliente,
             p.nombre AS proyecto, e.moneda, e.monto, e.categoria AS subtipo,
             e.comprobante, e.descripcion
      FROM egresos e JOIN destinatarios d ON d.id=e.destinatario_id
-     LEFT JOIN proyectos p ON p.id=e.proyecto_id
-     ${where.replace('fecha', 'e.fecha')}`
+     LEFT JOIN proyectos p ON p.id=e.proyecto_id ${condE}`
   );
   const filas = [...ingresos, ...egresos].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   const enc = ['Fecha','Tipo','Cliente/Destinatario','Proyecto','Moneda','Monto','Subtipo','Comprobante','Descripción'];
