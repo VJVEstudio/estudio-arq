@@ -40,7 +40,7 @@ function Sidebar({ colapsado, onToggle }) {
       }}>
         {!colapsado && (
   <div>
-    <img src="/Logo_VJV_sin_nombres.jpg" alt="VJV" style={{ width: '48px', marginBottom: '8px', borderRadius: '4px' }} />
+    <img src="/logo_vjv.jpg" alt="VJV" style={{ width: '48px', marginBottom: '8px', borderRadius: '4px' }} />
     <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>VJV Arquitectos</p>
     <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>Panel de gestión</p>
   </div>
