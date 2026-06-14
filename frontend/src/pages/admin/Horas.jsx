@@ -1,13 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { get } from '../../lib/api';
+import { get, post } from '../../lib/api';
 import {
   EncabezadoSeccion, Tabla, Fila, Celda,
-  Select, Input, AlertaError, Boton,
+  Select, Input, AlertaError, Boton, Modal, Campo,
 } from '../../components/ui';
 
 const fmt  = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
 const fmtF = (f) => f ? new Date(f + 'T00:00:00').toLocaleDateString('es-AR') : '—';
 const AZUL = '#1a2744';
+
+const MESES = [
+  'Enero','Febrero','Marzo','Abril','Mayo','Junio',
+  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
+];
 
 function TarjetasHoras({ resumen }) {
   const totHoras = resumen.reduce((s, r) => s + Number(r.horas_totales), 0);
@@ -78,12 +83,132 @@ function TablaResumen({ resumen }) {
   );
 }
 
+// ── Panel de liquidación mensual ──────────────────────────────────────────────
+function PanelLiquidacion({ pendientes, socios, destinatarios, onLiquidar, cargando }) {
+  const [seleccion, setSeleccion] = useState(null);
+  const [pagado_por_estudio, setPagadoPorEstudio] = useState(true);
+  const [socio_id, setSocioId] = useState('');
+  const [destinatario_id, setDestinatarioId] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLiquidar = async () => {
+    if (!seleccion || !destinatario_id) { setError('Seleccioná un destinatario'); return; }
+    setGuardando(true);
+    setError('');
+    try {
+      await onLiquidar({
+        dibujante_id: seleccion.dibujante_id,
+        mes: seleccion.numero_mes,
+        anio: seleccion.anio,
+        destinatario_id,
+        pagado_por_estudio,
+        socio_id: pagado_por_estudio ? null : socio_id,
+      });
+      setSeleccion(null);
+    } catch (err) { setError(err.message); }
+    finally { setGuardando(false); }
+  };
+
+  if (cargando) return <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>;
+
+  if (!pendientes.length) {
+    return (
+      <div style={{ background: '#e8f5e9', borderRadius: '12px', padding: '20px 24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span style={{ fontSize: '24px' }}>✓</span>
+        <div>
+          <p style={{ margin: 0, fontWeight: 500, color: '#1b5e20' }}>¡Todo liquidado!</p>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#2e7d32' }}>No hay horas pendientes de pago.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p style={{ fontWeight: 500, fontSize: '15px', margin: '0 0 14px' }}>Horas pendientes de liquidación:</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+        {pendientes.map((p, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: seleccion === p ? '#e3f2fd' : '#fff',
+            border: `1px solid ${seleccion === p ? '#1a2744' : '#e0e0e0'}`,
+            borderRadius: '10px', padding: '12px 16px', cursor: 'pointer', flexWrap: 'wrap', gap: '12px',
+          }} onClick={() => setSeleccion(p)}>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <span style={{ fontWeight: 500 }}>{p.dibujante_nombre}</span>
+              <span style={{ background: '#f0f0f0', borderRadius: '20px', padding: '2px 10px', fontSize: '12px', color: '#666' }}>
+                {MESES[Number(p.numero_mes) - 1]} {p.anio}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '20px', fontSize: '14px' }}>
+              <span>{Number(p.horas_totales).toFixed(1)} h</span>
+              <span style={{ fontWeight: 700, color: '#b71c1c' }}>{fmt(p.monto_total)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {seleccion && (
+        <div style={{ background: '#f8f9fa', border: '1px solid #e0e0e0', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+          <p style={{ margin: '0 0 12px', fontWeight: 500, fontSize: '14px' }}>
+            Liquidar: {seleccion.dibujante_nombre} — {MESES[Number(seleccion.numero_mes) - 1]} {seleccion.anio}
+          </p>
+          <p style={{ margin: '0 0 16px', fontSize: '22px', fontWeight: 700, color: '#b71c1c' }}>{fmt(seleccion.monto_total)}</p>
+
+          <Campo label="Destinatario (dibujante) *">
+            <Select value={destinatario_id} onChange={e => setDestinatarioId(e.target.value)}>
+              <option value="">Seleccioná…</option>
+              {destinatarios.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+            </Select>
+          </Campo>
+
+          <div style={{ display: 'flex', gap: '24px', marginBottom: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              <input type="radio" name="pagador_liq" checked={pagado_por_estudio}
+                onChange={() => setPagadoPorEstudio(true)} />
+              El estudio
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              <input type="radio" name="pagador_liq" checked={!pagado_por_estudio}
+                onChange={() => setPagadoPorEstudio(false)} />
+              Un socio específico
+            </label>
+          </div>
+
+          {!pagado_por_estudio && (
+            <Campo label="Socio que pagó">
+              <Select value={socio_id} onChange={e => setSocioId(e.target.value)}>
+                <option value="">Seleccioná…</option>
+                {socios.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </Select>
+            </Campo>
+          )}
+
+          {error && <p style={{ color: '#b91c1c', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <Boton variante="secundario" onClick={() => setSeleccion(null)}>Cancelar</Boton>
+            <Boton onClick={handleLiquidar} disabled={guardando || !destinatario_id}>
+              {guardando ? 'Procesando…' : '✓ Confirmar liquidación'}
+            </Boton>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Horas() {
   const [horas,      setHoras]      = useState([]);
   const [resumen,    setResumen]    = useState([]);
+  const [pendientes, setPendientes] = useState([]);
   const [dibujantes, setDibujantes] = useState([]);
   const [proyectos,  setProyectos]  = useState([]);
+  const [socios,     setSocios]     = useState([]);
+  const [destinatarios, setDestinatarios] = useState([]);
   const [cargando,   setCargando]   = useState(true);
+  const [cargandoPendientes, setCargandoPendientes] = useState(true);
   const [error,      setError]      = useState(null);
   const [filtros,    setFiltros]    = useState({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' });
   const [vista,      setVista]      = useState('detalle');
@@ -94,19 +219,28 @@ export default function Horas() {
     try {
       const params = new URLSearchParams();
       Object.entries(filtros).forEach(([k, v]) => { if (v) params.set(k, v); });
-      const [h, r, d, p] = await Promise.all([
+      const [h, r, d, p, s, dest, pend] = await Promise.all([
         get(`/horas?${params}`),
         get(`/horas/resumen?${params}`),
         get('/dibujantes'),
         get('/proyectos'),
+        get('/socios'),
+        get('/destinatarios'),
+        get('/horas/pendientes'),
       ]);
       setHoras(h); setResumen(r); setDibujantes(d); setProyectos(p);
+      setSocios(s); setDestinatarios(dest); setPendientes(pend);
     } catch (err) { setError(err.message); }
-    finally { setCargando(false); }
+    finally { setCargando(false); setCargandoPendientes(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(filtros)]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  const handleLiquidar = async (datos) => {
+    await post('/horas/liquidar', datos);
+    await cargar();
+  };
 
   const setF = (k) => (e) => setFiltros(p => ({ ...p, [k]: e.target.value }));
 
@@ -114,6 +248,7 @@ export default function Horas() {
     <div style={{ padding: '32px', maxWidth: '1200px' }}>
       <EncabezadoSeccion titulo="Horas trabajadas" subtitulo="Vista completa con costos por dibujante y proyecto" />
       <TarjetasHoras resumen={resumen} />
+
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         <Select value={filtros.dibujante_id} onChange={setF('dibujante_id')} style={{ width: 'auto' }}>
           <option value="">Todos los dibujantes</option>
@@ -129,24 +264,38 @@ export default function Horas() {
           <Boton variante="texto" onClick={() => setFiltros({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' })}>Limpiar</Boton>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
-          {['detalle', 'resumen'].map(v => (
+          {['detalle', 'resumen', 'liquidar'].map(v => (
             <button key={v} onClick={() => setVista(v)} style={{
               padding: '6px 14px', fontSize: '13px', borderRadius: '20px', border: '1px solid',
               borderColor: vista === v ? AZUL : '#d0d0d0',
               background:  vista === v ? AZUL : 'transparent',
               color:       vista === v ? 'white' : '#666',
               cursor: 'pointer', fontFamily: 'inherit',
-            }}>{v === 'detalle' ? 'Detalle' : 'Por dibujante'}</button>
+            }}>
+              {v === 'detalle' ? 'Detalle' : v === 'resumen' ? 'Por dibujante' : `💰 Liquidar (${pendientes.length})`}
+            </button>
           ))}
         </div>
       </div>
+
       {error && <AlertaError mensaje={error} />}
+
       {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
       : vista === 'resumen' ? <TablaResumen resumen={resumen} />
-      : (
+      : vista === 'liquidar' ? (
+        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '24px' }}>
+          <PanelLiquidacion
+            pendientes={pendientes}
+            socios={socios}
+            destinatarios={destinatarios}
+            onLiquidar={handleLiquidar}
+            cargando={cargandoPendientes}
+          />
+        </div>
+      ) : (
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
-            columnas={['Fecha', 'Dibujante', 'Proyecto', 'Horas', 'Tarifa aplicada', 'Costo', 'Descripción']}
+            columnas={['Fecha', 'Dibujante', 'Proyecto', 'Horas', 'Tarifa aplicada', 'Costo', 'Estado', 'Descripción']}
             datos={horas}
             vacio="No hay registros de horas para los filtros seleccionados."
             renderFila={(h) => (
@@ -157,6 +306,16 @@ export default function Horas() {
                 <Celda align="center" style={{ fontWeight: 600, color: AZUL }}>{Number(h.horas).toFixed(1)} h</Celda>
                 <Celda style={{ fontFamily: 'monospace', fontSize: '12px', color: '#999' }}>{fmt(h.tarifa_aplicada)}/h</Celda>
                 <Celda style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(h.costo_total)}</Celda>
+                <Celda>
+                  <span style={{
+                    display: 'inline-block', padding: '2px 10px', borderRadius: '20px',
+                    fontSize: '12px', fontWeight: 500,
+                    background: h.liquidada ? '#e8f5e9' : '#fff8e1',
+                    color: h.liquidada ? '#1b5e20' : '#f57f17',
+                  }}>
+                    {h.liquidada ? 'Liquidada' : 'Pendiente'}
+                  </span>
+                </Celda>
                 <Celda style={{ color: '#666', fontSize: '13px', maxWidth: '280px' }}>
                   <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {h.descripcion_tarea || '—'}
