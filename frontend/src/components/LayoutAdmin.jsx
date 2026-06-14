@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const AZUL = '#2d2d2d';
+const AZUL = '#6b6b6b';
 
 const NAV = [
   { grupo: 'Principal', items: [
@@ -39,11 +39,12 @@ function Sidebar({ colapsado, onToggle }) {
         justifyContent: colapsado ? 'center' : 'space-between', minHeight: 64,
       }}>
         {!colapsado && (
-          <div>
-            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>VJV Arquitectos</p>
-            <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>Panel de gestión</p>
-          </div>
-        )}
+  <div>
+    <img src="/Logo_VJV_sin_nombres.jpg" alt="VJV" style={{ width: '48px', marginBottom: '8px', borderRadius: '4px' }} />
+    <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>VJV Arquitectos</p>
+    <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>Panel de gestión</p>
+  </div>
+)}
         <button onClick={onToggle} style={{
           background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '6px',
           color: 'rgba(255,255,255,0.7)', cursor: 'pointer', padding: '6px 8px',
