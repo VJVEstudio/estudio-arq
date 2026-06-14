@@ -40,12 +40,14 @@ router.post('/login', async (req, res) => {
     const usuario = rows[0];
     if (!usuario) return res.status(401).json({ error: 'Credenciales incorrectas' });
     if (!usuario.activo) return res.status(403).json({ error: 'Usuario desactivado.' });
+
     const { rows: pwCheck } = await query(
-  `SELECT (password_hash = crypt($1, password_hash)) AS valida FROM usuarios WHERE id = $2`,
-  [password, usuario.id]
-);
-const passwordValida = pwCheck[0]?.valida;
+      `SELECT (password_hash = crypt($1, password_hash)) AS valida FROM usuarios WHERE id = $2`,
+      [password, usuario.id]
+    );
+    const passwordValida = pwCheck[0]?.valida;
     if (!passwordValida) return res.status(401).json({ error: 'Credenciales incorrectas' });
+
     const accessToken  = generarAccessToken(usuario);
     const refreshToken = generarRefreshToken(usuario);
     await query(
@@ -145,26 +147,5 @@ router.get('/me', auth.verificar, async (req, res) => {
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
-// Ruta temporal para crear usuario admin — BORRAR DESPUÉS
-router.post('/setup', async (req, res) => {
-  const { nombre, email, password } = req.body;
-  try {
-    const hash = await bcrypt.hash(password, 12);
-    const { rows } = await query(
-      `INSERT INTO usuarios (nombre, email, password_hash, rol)
-       VALUES ($1, $2, $3, 'admin')
-       ON CONFLICT (email) DO UPDATE SET password_hash = $3
-       RETURNING id, nombre, email, rol`,
-      [nombre, email, hash]
-    );
-    await query(
-      `INSERT INTO socios (usuario_id, nombre, porcentaje_participacion)
-       VALUES ($1, $2, 33.34)
-       ON CONFLICT DO NOTHING`,
-      [rows[0].id, nombre]
-    );
-    res.json({ ok: true, usuario: rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+
+module.exports = router;
