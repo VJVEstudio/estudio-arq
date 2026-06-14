@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const AZUL = '#1a2744';
+const AZUL = '#2d2d2d';
 
 const NAV = [
   { grupo: 'Principal', items: [
@@ -40,7 +40,7 @@ function Sidebar({ colapsado, onToggle }) {
       }}>
         {!colapsado && (
           <div>
-            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>Arq. Hospitalaria</p>
+            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>VJV Arquitectos</p>
             <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.45)' }}>Panel de gestión</p>
           </div>
         )}
