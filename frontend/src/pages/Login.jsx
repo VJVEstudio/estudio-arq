@@ -32,18 +32,13 @@ export default function Login() {
         width: '42%', background: `linear-gradient(160deg, ${AZUL} 0%, #243460 100%)`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <div style={{ padding: '48px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' }}>
-            <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-              <rect x="4" y="4" width="28" height="28" rx="2" stroke="white" strokeWidth="1.5" fill="none"/>
-              <line x1="4" y1="18" x2="32" y2="18" stroke="white" strokeWidth="1"/>
-              <line x1="18" y1="4" x2="18" y2="32" stroke="white" strokeWidth="1"/>
-              <rect x="8" y="8" width="7" height="7" stroke="white" strokeWidth="1" fill="none"/>
-              <rect x="21" y="8" width="7" height="7" stroke="white" strokeWidth="1" fill="none"/>
-              <rect x="8" y="21" width="7" height="7" stroke="white" strokeWidth="1" fill="none"/>
-            </svg>
-            <span style={{ color: 'white', fontSize: '18px', fontWeight: 500 }}>Arq. Hospitalaria</span>
-          </div>
+       <div style={{ marginBottom: '40px' }}>
+  <img 
+    src="/Logo_VJV_invert_-_copia.jpg" 
+    alt="VJV Arquitectos" 
+    style={{ width: '220px', borderRadius: '4px' }} 
+  />
+</div>
           <p style={{ color: 'rgba(255,255,255,0.95)', fontSize: '28px', fontWeight: 300, margin: 0 }}>
             Gestión interna
           </p>
