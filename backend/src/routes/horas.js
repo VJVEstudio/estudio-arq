@@ -163,7 +163,7 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
     return res.status(400).json({ error: 'dibujante_id, mes y anio son obligatorios' });
   }
 
-  const { pool } = require('../db');
+  const { query, pool } = require('../db');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
