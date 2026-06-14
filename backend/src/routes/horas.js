@@ -1,5 +1,5 @@
 const express = require('express');
-const { query } = require('../db');
+const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 
 const router = express.Router();
@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
   if (proyecto_id) { params.push(proyecto_id); condiciones.push(`h.proyecto_id = $${params.length}`); }
   if (desde)       { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
   if (hasta)       { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
-  const camposCosto = esAdmin ? ', h.tarifa_aplicada, h.costo_total' : '';
+  const camposCosto = esAdmin ? ', h.tarifa_aplicada, h.costo_total, h.liquidada' : '';
   const { rows } = await query(
     `SELECT h.id, h.fecha, h.horas, h.descripcion_tarea, h.created_at,
             h.dibujante_id, d.nombre AS dibujante_nombre,
@@ -61,78 +61,6 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
   res.json(rows);
 });
 
-router.post('/', async (req, res) => {
-  const esAdmin = req.usuario.rol === 'admin';
-  const { proyecto_id, fecha, horas, descripcion_tarea } = req.body;
-  let { dibujante_id } = req.body;
-  if (!proyecto_id)             return res.status(400).json({ error: 'proyecto_id es obligatorio' });
-  if (!horas || horas <= 0)    return res.status(400).json({ error: 'Las horas deben ser mayor a 0' });
-  if (!fecha)                   return res.status(400).json({ error: 'La fecha es obligatoria' });
-  if (!esAdmin) {
-    const { rows } = await query(
-      `SELECT id FROM dibujantes WHERE usuario_id = $1`, [req.usuario.id]
-    );
-    if (!rows[0]) return res.status(403).json({ error: 'No tenés perfil de dibujante asignado' });
-    dibujante_id = rows[0].id;
-    const { rows: asig } = await query(
-      `SELECT 1 FROM proyecto_dibujantes
-       WHERE proyecto_id=$1 AND dibujante_id=$2 AND activo=TRUE`,
-      [proyecto_id, dibujante_id]
-    );
-    if (!asig.length) return res.status(403).json({ error: 'No estás asignado a este proyecto' });
-  }
-  const { rows: tarifaRows } = await query(
-    `SELECT tarifa_hora_base FROM dibujantes WHERE id=$1`, [dibujante_id]
-  );
-  if (!tarifaRows[0]) return res.status(404).json({ error: 'Dibujante no encontrado' });
-  const tarifa_aplicada = tarifaRows[0].tarifa_hora_base;
-  const { rows } = await query(
-    `INSERT INTO horas_dibujantes
-       (dibujante_id, proyecto_id, fecha, horas, tarifa_aplicada, descripcion_tarea)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [dibujante_id, proyecto_id, fecha, horas, tarifa_aplicada, descripcion_tarea || null]
-  );
-  res.status(201).json(rows[0]);
-});
-
-router.put('/:id', async (req, res) => {
-  const esAdmin = req.usuario.rol === 'admin';
-  const { fecha, horas, descripcion_tarea } = req.body;
-  if (!horas || horas <= 0) return res.status(400).json({ error: 'Las horas deben ser mayor a 0' });
-  if (!esAdmin) {
-    const { rows: check } = await query(
-      `SELECT h.id FROM horas_dibujantes h
-       JOIN dibujantes d ON d.id = h.dibujante_id
-       WHERE h.id=$1 AND d.usuario_id=$2`,
-      [req.params.id, req.usuario.id]
-    );
-    if (!check.length) return res.status(403).json({ error: 'No podés editar este registro' });
-  }
-  const { rows } = await query(
-    `UPDATE horas_dibujantes SET fecha=$1, horas=$2, descripcion_tarea=$3
-     WHERE id=$4 RETURNING *`,
-    [fecha, horas, descripcion_tarea || null, req.params.id]
-  );
-  if (!rows[0]) return res.status(404).json({ error: 'Registro no encontrado' });
-  res.json(rows[0]);
-});
-
-router.delete('/:id', async (req, res) => {
-  const esAdmin = req.usuario.rol === 'admin';
-  if (!esAdmin) {
-    const { rows } = await query(
-      `SELECT h.id FROM horas_dibujantes h
-       JOIN dibujantes d ON d.id=h.dibujante_id
-       WHERE h.id=$1 AND d.usuario_id=$2`,
-      [req.params.id, req.usuario.id]
-    );
-    if (!rows.length) return res.status(403).json({ error: 'No podés eliminar este registro' });
-  }
-  await query(`DELETE FROM horas_dibujantes WHERE id=$1`, [req.params.id]);
-  res.status(204).send();
-});
-// ── GET /api/horas/liquidaciones ──────────────────────────────────────────────
-// Resumen de horas por dibujante y mes para liquidar
 router.get('/pendientes', auth.soloAdmin, async (req, res) => {
   const { rows } = await query(`
     SELECT
@@ -154,21 +82,14 @@ router.get('/pendientes', auth.soloAdmin, async (req, res) => {
   res.json(rows);
 });
 
-// ── POST /api/horas/liquidar ──────────────────────────────────────────────────
-// Liquidar horas de un dibujante en un mes específico
 router.post('/liquidar', auth.soloAdmin, async (req, res) => {
   const { dibujante_id, mes, anio, destinatario_id, pagado_por_estudio, socio_id } = req.body;
-
   if (!dibujante_id || !mes || !anio) {
     return res.status(400).json({ error: 'dibujante_id, mes y anio son obligatorios' });
   }
-
-  const { query, pool } = require('../db');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    // 1. Obtener horas pendientes del período
     const { rows: horas } = await client.query(`
       SELECT id, horas, costo_total FROM horas_dibujantes
       WHERE dibujante_id = $1
@@ -176,51 +97,38 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
         AND EXTRACT(YEAR FROM fecha) = $3
         AND liquidada = FALSE
     `, [dibujante_id, mes, anio]);
-
     if (!horas.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'No hay horas pendientes para ese período' });
     }
-
     const horas_totales = horas.reduce((s, h) => s + Number(h.horas), 0);
     const monto_total   = horas.reduce((s, h) => s + Number(h.costo_total), 0);
-
-    // 2. Crear el egreso
     const { rows: [egreso] } = await client.query(`
       INSERT INTO egresos
         (destinatario_id, categoria, monto, moneda, pagado_por_estudio, socio_id, fecha, descripcion)
       VALUES ($1, 'dibujantes', $2, 'ARS', $3, $4, CURRENT_DATE, $5)
       RETURNING *
     `, [
-      destinatario_id,
-      monto_total,
+      destinatario_id, monto_total,
       pagado_por_estudio ?? true,
       pagado_por_estudio ? null : socio_id,
       `Honorarios dibujante — ${mes}/${anio}`,
     ]);
-
-    // 3. Distribuir el egreso entre socios
     await client.query(`SELECT distribuir_egreso($1)`, [egreso.id]);
-
-    // 4. Crear registro de liquidación
     const { rows: [liquidacion] } = await client.query(`
       INSERT INTO liquidaciones_dibujantes
         (dibujante_id, mes, anio, horas_totales, monto_total, egreso_id)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `, [dibujante_id, mes, anio, horas_totales, monto_total, egreso.id]);
-
-    // 5. Marcar horas como liquidadas
     const ids = horas.map(h => h.id);
     await client.query(`
       UPDATE horas_dibujantes
       SET liquidada = TRUE, liquidacion_id = $1
       WHERE id = ANY($2)
     `, [liquidacion.id, ids]);
-
     await client.query('COMMIT');
     res.status(201).json({ liquidacion, egreso, horas_totales, monto_total });
-
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error liquidando horas:', err);
@@ -229,4 +137,66 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
     client.release();
   }
 });
+
+router.post('/', async (req, res) => {
+  const esAdmin = req.usuario.rol === 'admin';
+  const { proyecto_id, fecha, horas, descripcion_tarea } = req.body;
+  let { dibujante_id } = req.body;
+  if (!proyecto_id)          return res.status(400).json({ error: 'proyecto_id es obligatorio' });
+  if (!horas || horas <= 0)  return res.status(400).json({ error: 'Las horas deben ser mayor a 0' });
+  if (!fecha)                return res.status(400).json({ error: 'La fecha es obligatoria' });
+  if (!esAdmin) {
+    const { rows } = await query(`SELECT id FROM dibujantes WHERE usuario_id = $1`, [req.usuario.id]);
+    if (!rows[0]) return res.status(403).json({ error: 'No tenés perfil de dibujante asignado' });
+    dibujante_id = rows[0].id;
+    const { rows: asig } = await query(
+      `SELECT 1 FROM proyecto_dibujantes WHERE proyecto_id=$1 AND dibujante_id=$2 AND activo=TRUE`,
+      [proyecto_id, dibujante_id]
+    );
+    if (!asig.length) return res.status(403).json({ error: 'No estás asignado a este proyecto' });
+  }
+  const { rows: tarifaRows } = await query(`SELECT tarifa_hora_base FROM dibujantes WHERE id=$1`, [dibujante_id]);
+  if (!tarifaRows[0]) return res.status(404).json({ error: 'Dibujante no encontrado' });
+  const tarifa_aplicada = tarifaRows[0].tarifa_hora_base;
+  const { rows } = await query(
+    `INSERT INTO horas_dibujantes
+       (dibujante_id, proyecto_id, fecha, horas, tarifa_aplicada, descripcion_tarea)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [dibujante_id, proyecto_id, fecha, horas, tarifa_aplicada, descripcion_tarea || null]
+  );
+  res.status(201).json(rows[0]);
+});
+
+router.put('/:id', async (req, res) => {
+  const esAdmin = req.usuario.rol === 'admin';
+  const { fecha, horas, descripcion_tarea } = req.body;
+  if (!horas || horas <= 0) return res.status(400).json({ error: 'Las horas deben ser mayor a 0' });
+  if (!esAdmin) {
+    const { rows: check } = await query(
+      `SELECT h.id FROM horas_dibujantes h JOIN dibujantes d ON d.id=h.dibujante_id WHERE h.id=$1 AND d.usuario_id=$2`,
+      [req.params.id, req.usuario.id]
+    );
+    if (!check.length) return res.status(403).json({ error: 'No podés editar este registro' });
+  }
+  const { rows } = await query(
+    `UPDATE horas_dibujantes SET fecha=$1, horas=$2, descripcion_tarea=$3 WHERE id=$4 RETURNING *`,
+    [fecha, horas, descripcion_tarea || null, req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Registro no encontrado' });
+  res.json(rows[0]);
+});
+
+router.delete('/:id', async (req, res) => {
+  const esAdmin = req.usuario.rol === 'admin';
+  if (!esAdmin) {
+    const { rows } = await query(
+      `SELECT h.id FROM horas_dibujantes h JOIN dibujantes d ON d.id=h.dibujante_id WHERE h.id=$1 AND d.usuario_id=$2`,
+      [req.params.id, req.usuario.id]
+    );
+    if (!rows.length) return res.status(403).json({ error: 'No podés eliminar este registro' });
+  }
+  await query(`DELETE FROM horas_dibujantes WHERE id=$1`, [req.params.id]);
+  res.status(204).send();
+});
+
 module.exports = router;
