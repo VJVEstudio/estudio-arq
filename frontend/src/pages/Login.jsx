@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const AZUL = '#1a2744';
+const AZUL = '#6b6b6b';
 
 export default function Login() {
   const { login } = useAuth();
@@ -28,26 +28,30 @@ export default function Login() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
+      {/* Panel izquierdo */}
       <div style={{
-        width: '42%', background: `linear-gradient(160deg, ${AZUL} 0%, #243460 100%)`,
+        width: '42%',
+        background: `linear-gradient(160deg, ${AZUL} 0%, #4a4a4a 100%)`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-       <div style={{ marginBottom: '40px' }}>
-  <img 
-    src="/Logo_VJV_invert_-_copia.jpg" 
-    alt="VJV Arquitectos" 
-    style={{ width: '220px', borderRadius: '4px' }} 
-  />
-</div>
-          <p style={{ color: 'rgba(255,255,255,0.95)', fontSize: '28px', fontWeight: 300, margin: 0 }}>
-            Gestión interna
-          </p>
-          <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '13px', margin: '10px 0 0', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            Proyectos · Finanzas · Equipos
-          </p>
+        <div style={{ padding: '48px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+          <img
+            src="/LogoVJVinvert.jpg"
+            alt="VJV Arquitectos"
+            style={{ width: '260px', borderRadius: '6px' }}
+          />
+          <div>
+            <p style={{ color: 'rgba(255,255,255,0.95)', fontSize: '26px', fontWeight: 300, margin: 0 }}>
+              Gestión interna
+            </p>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '8px 0 0', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Proyectos · Finanzas · Equipos
+            </p>
+          </div>
         </div>
       </div>
 
+      {/* Panel derecho */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', padding: '48px 24px' }}>
         <div style={{ width: '100%', maxWidth: '380px' }}>
           <h1 style={{ fontSize: '22px', fontWeight: 500, margin: '0 0 6px' }}>Iniciar sesión</h1>
@@ -65,7 +69,6 @@ export default function Login() {
                 }}
               />
             </div>
-
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Contraseña</label>
               <input
@@ -77,7 +80,6 @@ export default function Login() {
                 }}
               />
             </div>
-
             {error && (
               <div style={{
                 background: '#fff0f0', border: '1px solid #fca5a5', color: '#b91c1c',
@@ -86,7 +88,6 @@ export default function Login() {
                 {error}
               </div>
             )}
-
             <button type="submit" disabled={cargando} style={{
               width: '100%', padding: '11px', background: AZUL, color: 'white',
               border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 500,
