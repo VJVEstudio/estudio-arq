@@ -103,7 +103,7 @@ export default function MisHoras() {
     setCargando(true);
     setError(null);
     try {
-      const [h, p] = await Promise.all([get('/horas'), get('/proyectos')]);
+   const [h, p] = await Promise.all([get('/horas'), get('/proyectos?todos=true')]);
       setHoras(h); setProyectos(p);
     } catch (err) { setError(err.message); }
     finally { setCargando(false); }
