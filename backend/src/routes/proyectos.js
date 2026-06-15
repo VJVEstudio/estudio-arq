@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
   const condiciones = ['TRUE'];
   if (estado) { params.push(estado); condiciones.push(`p.estado = $${params.length}`); }
   if (cliente_id) { params.push(cliente_id); condiciones.push(`p.cliente_id = $${params.length}`); }
-  if (rol === 'dibujante') {
+  if (rol === 'dibujante' && !req.query.todos) {
     params.push(usuario_id);
     condiciones.push(`EXISTS (
       SELECT 1 FROM proyecto_dibujantes pd
