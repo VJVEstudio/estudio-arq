@@ -49,7 +49,7 @@ router.get('/:id', async (req, res) => {
               ) ORDER BY th.fecha_ajuste DESC)
               FILTER (WHERE th.id IS NOT NULL), '[]'
             ) AS historial_tarifas
-     FROM  d
+     FROM dibujantes d
      JOIN usuarios u ON u.id = d.usuario_id
      LEFT JOIN tarifa_historial th ON th.dibujante_id = d.id
      WHERE d.id = $1
@@ -89,7 +89,7 @@ router.post('/', auth.soloAdmin, async (req, res) => {
        VALUES ($1, $2, $3, 'dibujante') RETURNING id`,
       [nombre.trim(), email.toLowerCase().trim(), hash]
     );
-const { rows: [dibujante] } = await client.query(
+    const { rows: [dibujante] } = await client.query(
       `INSERT INTO dibujantes (usuario_id, nombre, tarifa_hora_base, fecha_inicio)
        VALUES ($1, $2, $3, $4) RETURNING *`,
       [usuario.id, nombre.trim(), tarifa_hora_base,
@@ -100,7 +100,6 @@ const { rows: [dibujante] } = await client.query(
        VALUES ($1, 0, $2, 'Tarifa inicial', $3)`,
       [dibujante.id, tarifa_hora_base, req.usuario.id]
     );
-    // Crear destinatario automáticamente para el dibujante
     await client.query(
       `INSERT INTO destinatarios (nombre, tipo, notas)
        VALUES ($1, 'profesional', $2)
