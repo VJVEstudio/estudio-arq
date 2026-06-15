@@ -40,12 +40,12 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
   const { proyecto_id, desde, hasta } = req.query;
   const condiciones = ['TRUE'];
   const params = [];
-  if (proyecto_id) { params.push(proyecto_id); condiciones.push(`h.proyecto_id = $${params.length}`); }
-  if (desde)       { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
-  if (hasta)       { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
+   (proyecto_id) { params.push(proyecto_id); condiciones.push(`h.proyecto_id = $${params.length}`); }
+   (desde)       { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
+   (hasta)       { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
   const { rows } = await query(
     `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre,
-            d.tarifa_hora_base AS tarifa_actual,
+            d.tara_hora_base AS tara_actual,
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
             COUNT(h.id) AS registros,
             SUM(h.horas) AS horas_totales,
@@ -54,7 +54,7 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
      WHERE ${condiciones.join(' AND ')}
-     GROUP BY d.id, d.nombre, d.tarifa_hora_base, p.id, p.nombre
+     GROUP BY d.id, d.nombre, d.tara_hora_base, p.id, p.nombre
      ORDER BY d.nombre, p.nombre`,
     params
   );
@@ -84,7 +84,7 @@ router.get('/pendientes', auth.soloAdmin, async (req, res) => {
 
 router.post('/liquidar', auth.soloAdmin, async (req, res) => {
   const { dibujante_id, mes, anio, destinatario_id, pagado_por_estudio, socio_id } = req.body;
-  if (!dibujante_id || !mes || !anio) {
+   (!dibujante_id || !mes || !anio) {
     return res.status(400).json({ error: 'dibujante_id, mes y anio son obligatorios' });
   }
   const client = await pool.connect();
@@ -99,7 +99,7 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
         AND liquidada = FALSE
     `, [dibujante_id, mes, anio]);
 
-    if (!horas.length) {
+     (!horas.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'No hay horas pendientes para ese período' });
     }
@@ -161,17 +161,14 @@ router.post('/', async (req, res) => {
   const esAdmin = req.usuario.rol === 'admin';
   const { proyecto_id, fecha, horas, descripcion_tarea } = req.body;
   let { dibujante_id } = req.body;
-  if (!proyecto_id)          return res.status(400).json({ error: 'proyecto_id es obligatorio' });
-  if (!horas || horas <= 0)  return res.status(400).json({ error: 'Las horas deben ser mayor a 0' });
-  if (!fecha)                return res.status(400).json({ error: 'La fecha es obligatoria' });
-  if (!esAdmin) {
+   (!proyecto_id)          return res.status(400).json({ error: 'proyecto_id es obligatorio' });
+   (!horas || horas <= 0)  return res.status(400).json({ error: 'Las horas deben ser mayor a 0' });
+   (!fecha)                return res.status(400).json({ error: 'La fecha es obligatoria' });
+   if (!esAdmin) {
     const { rows } = await query(`SELECT id FROM dibujantes WHERE usuario_id = $1`, [req.usuario.id]);
     if (!rows[0]) return res.status(403).json({ error: 'No tenés perfil de dibujante asignado' });
     dibujante_id = rows[0].id;
-    const { rows: asig } = await query(
-      `SELECT 1 FROM proyecto_dibujantes WHERE proyecto_id=$1 AND dibujante_id=$2 AND activo=TRUE`,
-      [proyecto_id, dibujante_id]
-    );
+  }
     if (!asig.length) return res.status(403).json({ error: 'No estás asignado a este proyecto' });
   }
   const { rows: tarifaRows } = await query(`SELECT tarifa_hora_base FROM dibujantes WHERE id=$1`, [dibujante_id]);
