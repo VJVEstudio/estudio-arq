@@ -90,45 +90,64 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const { rows: horas } = await client.query(`
-      SELECT id, horas, costo_total FROM horas_dibujantes
+      SELECT id, horas, costo_total, proyecto_id FROM horas_dibujantes
       WHERE dibujante_id = $1
         AND EXTRACT(MONTH FROM fecha) = $2
         AND EXTRACT(YEAR FROM fecha) = $3
         AND liquidada = FALSE
     `, [dibujante_id, mes, anio]);
+
     if (!horas.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'No hay horas pendientes para ese período' });
     }
+
     const horas_totales = horas.reduce((s, h) => s + Number(h.horas), 0);
     const monto_total   = horas.reduce((s, h) => s + Number(h.costo_total), 0);
+
+    // Obtener el proyecto con más horas en ese período
+    const proyectosConteo = {};
+    horas.forEach(h => {
+      proyectosConteo[h.proyecto_id] = (proyectosConteo[h.proyecto_id] || 0) + Number(h.horas);
+    });
+    const proyecto_id_egreso = Object.entries(proyectosConteo)
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
     const { rows: [egreso] } = await client.query(`
       INSERT INTO egresos
-        (destinatario_id, categoria, monto, moneda, pagado_por_estudio, socio_id, fecha, descripcion)
-      VALUES ($1, 'dibujantes', $2, 'ARS', $3, $4, CURRENT_DATE, $5)
+        (destinatario_id, proyecto_id, categoria, monto, moneda, pagado_por_estudio, socio_id, fecha, descripcion)
+      VALUES ($1, $2, 'dibujantes', $3, 'ARS', $4, $5, CURRENT_DATE, $6)
       RETURNING *
     `, [
-      destinatario_id, monto_total,
+      destinatario_id,
+      proyecto_id_egreso,
+      monto_total,
       pagado_por_estudio ?? true,
       pagado_por_estudio ? null : socio_id,
       `Honorarios dibujante — ${mes}/${anio}`,
     ]);
+
     await client.query(`SELECT distribuir_egreso($1)`, [egreso.id]);
+
     const { rows: [liquidacion] } = await client.query(`
       INSERT INTO liquidaciones_dibujantes
         (dibujante_id, mes, anio, horas_totales, monto_total, egreso_id)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `, [dibujante_id, mes, anio, horas_totales, monto_total, egreso.id]);
+
     const ids = horas.map(h => h.id);
     await client.query(`
       UPDATE horas_dibujantes
       SET liquidada = TRUE, liquidacion_id = $1
       WHERE id = ANY($2)
     `, [liquidacion.id, ids]);
+
     await client.query('COMMIT');
     res.status(201).json({ liquidacion, egreso, horas_totales, monto_total });
+
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error liquidando horas:', err);
