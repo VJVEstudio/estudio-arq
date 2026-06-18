@@ -72,25 +72,33 @@ function EgresosPorCategoria({ egresos }) {
   );
 }
 
-function TablaPorProyecto({ proyectos, onVerReporte }) {
+function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
   return (
     <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
-      <p style={{ margin: 0, fontWeight: 500, padding: '16px 20px', borderBottom: '1px solid #e0e0e0' }}>Resultado por proyecto</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #e0e0e0' }}>
+        <p style={{ margin: 0, fontWeight: 500 }}>Resultado por proyecto</p>
+        {cotizacion && (
+          <span style={{ fontSize: '12px', color: '#666' }}>
+            Dólar oficial: <strong>$ {Number(cotizacion).toLocaleString('es-AR')}</strong>
+          </span>
+        )}
+      </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
           <thead>
             <tr>
-              {['Proyecto', 'Cliente', 'Estado', 'Ingresos ARS', 'Egresos ARS', 'Resultado ARS', 'Ingresos USD', 'Egresos USD', 'Resultado USD', 'Horas', ''].map(h => (
+              {['Proyecto', 'Cliente', 'Estado', 'Ingresos ARS', 'Egresos ARS', 'Ingresos USD', 'Egresos USD', 'Resultado total ($)', 'Horas', ''].map(h => (
                 <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: '#666', borderBottom: '1px solid #e0e0e0', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {proyectos.length === 0
-              ? <tr><td colSpan={11} style={{ padding: '24px', textAlign: 'center', color: '#999' }}>Sin proyectos en este período</td></tr>
+              ? <tr><td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: '#999' }}>Sin proyectos en este período</td></tr>
               : proyectos.map(p => {
                 const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars) - Number(p.costo_horas);
                 const resultadoUsd = Number(p.ingresos_usd) - Number(p.egresos_usd);
+                const resultadoTotalArs = resultadoArs + (resultadoUsd * Number(cotizacion || 0));
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #e0e0e0' }}>
                     <td style={{ padding: '10px 14px', fontWeight: 500, whiteSpace: 'nowrap' }}>{p.proyecto}</td>
@@ -106,13 +114,10 @@ function TablaPorProyecto({ proyectos, onVerReporte }) {
                     </td>
                     <td style={{ padding: '10px 14px', color: '#1b5e20', whiteSpace: 'nowrap' }}>{fmt(p.ingresos_ars)}</td>
                     <td style={{ padding: '10px 14px', color: '#b71c1c', whiteSpace: 'nowrap' }}>{fmt(p.egresos_ars)}</td>
-                    <td style={{ padding: '10px 14px', fontWeight: 700, color: resultadoArs >= 0 ? '#1b5e20' : '#b71c1c', whiteSpace: 'nowrap' }}>
-                      {resultadoArs >= 0 ? '+' : ''}{fmt(resultadoArs)}
-                    </td>
                     <td style={{ padding: '10px 14px', color: '#0d47a1', whiteSpace: 'nowrap' }}>{fmt(p.ingresos_usd, 'USD')}</td>
                     <td style={{ padding: '10px 14px', color: '#880e4f', whiteSpace: 'nowrap' }}>{fmt(p.egresos_usd, 'USD')}</td>
-                    <td style={{ padding: '10px 14px', fontWeight: 700, color: resultadoUsd >= 0 ? '#0d47a1' : '#880e4f', whiteSpace: 'nowrap' }}>
-                      {resultadoUsd >= 0 ? '+' : ''}{fmt(resultadoUsd, 'USD')}
+                    <td style={{ padding: '10px 14px', fontWeight: 700, color: resultadoTotalArs >= 0 ? '#1b5e20' : '#b71c1c', whiteSpace: 'nowrap' }}>
+                      {resultadoTotalArs >= 0 ? '+' : ''}{fmt(resultadoTotalArs)}
                     </td>
                     <td style={{ padding: '10px 14px', color: '#666', whiteSpace: 'nowrap' }}>{fmtH(p.horas_totales)}</td>
                     <td style={{ padding: '10px 14px', textAlign: 'right' }}>
