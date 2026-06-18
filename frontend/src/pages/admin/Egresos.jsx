@@ -28,7 +28,13 @@ const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
     ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
     : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
-const fmtF = (f) => f ? new Date(f + 'T00:00:00').toLocaleDateString('es-AR') : '—';
+const fmtFecha = (f) => {
+  if (!f) return '—';
+  const fecha = typeof f === 'string' ? f.split('T')[0] : f;
+  const d = new Date(fecha + 'T00:00:00');
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-AR');
+};
 
 function BadgeCategoria({ cat }) {
   const c = CAT_COLORES[cat] || { bg: '#f5f5f5', color: '#333' };
