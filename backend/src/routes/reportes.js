@@ -121,6 +121,7 @@ router.get('/proyecto/:id/csv', async (req, res) => {
 
 router.get('/general', async (req, res) => {
   const { desde, hasta } = req.query;
+  const cotizacionOficial = await obtenerCotizacionOficial();
   const params = [];
   const whereI = [];
   const whereE = [];
@@ -182,6 +183,7 @@ router.get('/general', async (req, res) => {
   const { rows: balanceSocios } = await query(`SELECT * FROM v_balance_socios`);
   res.json({
     periodo: { desde: desde || null, hasta: hasta || null },
+    cotizacion_oficial: cotizacionOficial,
     ingresos: ingresosResumen,
     egresos: egresosResumen,
     por_proyecto: porProyecto,
