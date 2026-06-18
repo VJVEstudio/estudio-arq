@@ -90,6 +90,7 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const { rows: horas } = await client.query(`
       SELECT id, horas, costo_total, proyecto_id FROM horas_dibujantes
       WHERE dibujante_id = $1
@@ -97,46 +98,59 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
         AND EXTRACT(YEAR FROM fecha) = $3
         AND liquidada = FALSE
     `, [dibujante_id, mes, anio]);
+
     if (!horas.length) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'No hay horas pendientes para ese período' });
     }
+
     const horas_totales = horas.reduce((s, h) => s + Number(h.horas), 0);
     const monto_total   = horas.reduce((s, h) => s + Number(h.costo_total), 0);
-    const proyectosConteo = {};
+
+    // Agrupar por proyecto: cuánto costo le corresponde a cada uno
+    const porProyecto = {};
     horas.forEach(h => {
-      proyectosConteo[h.proyecto_id] = (proyectosConteo[h.proyecto_id] || 0) + Number(h.horas);
+      if (!porProyecto[h.proyecto_id]) porProyecto[h.proyecto_id] = 0;
+      porProyecto[h.proyecto_id] += Number(h.costo_total);
     });
-    const proyecto_id_egreso = Object.entries(proyectosConteo)
-      .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-    const { rows: [egreso] } = await client.query(`
-      INSERT INTO egresos
-        (destinatario_id, proyecto_id, categoria, monto, moneda, pagado_por_estudio, socio_id, fecha, descripcion)
-      VALUES ($1, $2, 'dibujantes', $3, 'ARS', $4, $5, CURRENT_DATE, $6)
-      RETURNING *
-    `, [
-      destinatario_id,
-      proyecto_id_egreso,
-      monto_total,
-      pagado_por_estudio ?? true,
-      pagado_por_estudio ? null : socio_id,
-      `Honorarios dibujante — ${mes}/${anio}`,
-    ]);
-    await client.query(`SELECT distribuir_egreso($1)`, [egreso.id]);
+
+    // Crear un egreso por cada proyecto, proporcional a su costo
+    const egresosCreados = [];
+    for (const [proyecto_id_actual, monto_proyecto] of Object.entries(porProyecto)) {
+      const { rows: [egreso] } = await client.query(`
+        INSERT INTO egresos
+          (destinatario_id, proyecto_id, categoria, monto, moneda, pagado_por_estudio, socio_id, fecha, descripcion)
+        VALUES ($1, $2, 'dibujantes', $3, 'ARS', $4, $5, CURRENT_DATE, $6)
+        RETURNING *
+      `, [
+        destinatario_id,
+        proyecto_id_actual,
+        Math.round(monto_proyecto * 100) / 100,
+        pagado_por_estudio ?? true,
+        pagado_por_estudio ? null : socio_id,
+        `Honorarios dibujante — ${mes}/${anio}`,
+      ]);
+      await client.query(`SELECT distribuir_egreso($1)`, [egreso.id]);
+      egresosCreados.push(egreso);
+    }
+
     const { rows: [liquidacion] } = await client.query(`
       INSERT INTO liquidaciones_dibujantes
         (dibujante_id, mes, anio, horas_totales, monto_total, egreso_id)
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
-    `, [dibujante_id, mes, anio, horas_totales, monto_total, egreso.id]);
+    `, [dibujante_id, mes, anio, horas_totales, monto_total, egresosCreados[0]?.id || null]);
+
     const ids = horas.map(h => h.id);
     await client.query(`
       UPDATE horas_dibujantes
       SET liquidada = TRUE, liquidacion_id = $1
       WHERE id = ANY($2)
     `, [liquidacion.id, ids]);
+
     await client.query('COMMIT');
-    res.status(201).json({ liquidacion, egreso, horas_totales, monto_total });
+    res.status(201).json({ liquidacion, egresos: egresosCreados, horas_totales, monto_total });
+
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error liquidando horas:', err);
