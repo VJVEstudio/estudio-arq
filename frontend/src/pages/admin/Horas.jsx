@@ -6,7 +6,13 @@ import {
 } from '../../components/ui';
 
 const fmt  = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
-const fmtF = (f) => f ? new Date(f + 'T00:00:00').toLocaleDateString('es-AR') : '—';
+const fmtF = (f) => {
+  if (!f) return '—';
+  const fecha = typeof f === 'string' ? f.split('T')[0] : f;
+  const d = new Date(fecha + 'T00:00:00');
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-AR');
+};
 const AZUL = '#1a2744';
 
 const MESES = [
