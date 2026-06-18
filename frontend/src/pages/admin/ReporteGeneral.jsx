@@ -234,7 +234,7 @@ export default function ReporteGeneral() {
         <>
           <TarjetasTotales ingresos={reporte.ingresos} egresos={reporte.egresos} />
           <EgresosPorCategoria egresos={reporte.egresos} />
-          <TablaPorProyecto proyectos={reporte.por_proyecto} onVerReporte={(id) => navigate(`/admin/reportes/proyecto/${id}`)} />
+          <TablaPorProyecto proyectos={reporte.por_proyecto} onVerReporte={(id) => navigate(`/admin/reportes/proyecto/${id}`)} cotizacion={reporte.cotizacion_oficial} />
           <TablaDibujantes dibujantes={reporte.por_dibujante} />
         </>
       )}
