@@ -1,7 +1,24 @@
 const express = require('express');
 const { query } = require('../db');
 const auth = require('../middleware/auth');
+// Cache simple para no pedir la cotización en cada request
+let cotizacionCache = { valor: null, fecha: null };
 
+async function obtenerCotizacionOficial() {
+  const hoy = new Date().toISOString().split('T')[0];
+  if (cotizacionCache.fecha === hoy && cotizacionCache.valor) {
+    return cotizacionCache.valor;
+  }
+  try {
+    const resp = await fetch('https://dolarapi.com/v1/dolares/oficial');
+    const data = await resp.json();
+    cotizacionCache = { valor: data.venta, fecha: hoy };
+    return data.venta;
+  } catch (err) {
+    console.error('Error obteniendo cotización:', err);
+    return cotizacionCache.valor || 1000; // fallback
+  }
+}
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
 
