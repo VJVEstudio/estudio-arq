@@ -295,7 +295,7 @@ export default function Egresos() {
             vacio="No hay egresos registrados."
             renderFila={(e) => (
               <Fila key={e.id}>
-                <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{fmtF(e.fecha)}</Celda>
+                <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{fmtFecha(e.fecha)}</Celda>
                 <Celda><span style={{ fontWeight: 500 }}>{e.destinatario_nombre}</span></Celda>
                 <Celda><BadgeCategoria cat={e.categoria} /></Celda>
                 <Celda style={{ color: '#666', fontSize: '13px' }}>{e.proyecto_nombre || '—'}</Celda>
