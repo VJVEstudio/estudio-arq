@@ -76,45 +76,55 @@ function TablaPorProyecto({ proyectos, onVerReporte }) {
   return (
     <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden', marginBottom: '20px' }}>
       <p style={{ margin: 0, fontWeight: 500, padding: '16px 20px', borderBottom: '1px solid #e0e0e0' }}>Resultado por proyecto</p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-        <thead>
-          <tr>
-            {['Proyecto', 'Cliente', 'Estado', 'Ingresos ARS', 'Egresos ARS', 'Resultado ARS', 'Horas', ''].map(h => (
-              <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: '#666', borderBottom: '1px solid #e0e0e0', fontWeight: 500 }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {proyectos.length === 0
-            ? <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#999' }}>Sin proyectos en este período</td></tr>
-            : proyectos.map(p => {
-              const resultado = Number(p.ingresos_ars) - Number(p.egresos_ars) - Number(p.costo_horas);
-              return (
-                <tr key={p.id} style={{ borderBottom: '1px solid #e0e0e0' }}>
-                  <td style={{ padding: '10px 14px', fontWeight: 500 }}>{p.proyecto}</td>
-                  <td style={{ padding: '10px 14px', color: '#666', fontSize: '13px' }}>{p.cliente}</td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <span style={{
-                      background: p.estado === 'activo' ? '#e8f5e9' : p.estado === 'pausado' ? '#fff8e1' : '#ede7f6',
-                      color: p.estado === 'activo' ? '#1b5e20' : p.estado === 'pausado' ? '#f57f17' : '#311b92',
-                      borderRadius: '20px', padding: '2px 10px', fontSize: '12px', fontWeight: 500,
-                    }}>{p.estado}</span>
-                  </td>
-                  <td style={{ padding: '10px 14px', color: '#1b5e20' }}>{fmt(p.ingresos_ars)}</td>
-                  <td style={{ padding: '10px 14px', color: '#b71c1c' }}>{fmt(p.egresos_ars)}</td>
-                  <td style={{ padding: '10px 14px', fontWeight: 700, color: resultado >= 0 ? '#1b5e20' : '#b71c1c' }}>
-                    {resultado >= 0 ? '+' : ''}{fmt(resultado)}
-                  </td>
-                  <td style={{ padding: '10px 14px', color: '#666' }}>{fmtH(p.horas_totales)}</td>
-                  <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                    <Boton variante="secundario" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => onVerReporte(p.id)}>Ver reporte</Boton>
-                  </td>
-                </tr>
-              );
-            })
-          }
-        </tbody>
-      </table>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+          <thead>
+            <tr>
+              {['Proyecto', 'Cliente', 'Estado', 'Ingresos ARS', 'Egresos ARS', 'Resultado ARS', 'Ingresos USD', 'Egresos USD', 'Resultado USD', 'Horas', ''].map(h => (
+                <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: '#666', borderBottom: '1px solid #e0e0e0', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {proyectos.length === 0
+              ? <tr><td colSpan={11} style={{ padding: '24px', textAlign: 'center', color: '#999' }}>Sin proyectos en este período</td></tr>
+              : proyectos.map(p => {
+                const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars) - Number(p.costo_horas);
+                const resultadoUsd = Number(p.ingresos_usd) - Number(p.egresos_usd);
+                return (
+                  <tr key={p.id} style={{ borderBottom: '1px solid #e0e0e0' }}>
+                    <td style={{ padding: '10px 14px', fontWeight: 500, whiteSpace: 'nowrap' }}>{p.proyecto}</td>
+                    <td style={{ padding: '10px 14px', color: '#666', fontSize: '13px', whiteSpace: 'nowrap' }}>{p.cliente}</td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <span style={{
+                        background: p.estado === 'activo' ? '#e8f5e9' : p.estado === 'pausado' ? '#fff8e1' : '#ede7f6',
+                        color: p.estado === 'activo' ? '#1b5e20' : p.estado === 'pausado' ? '#f57f17' : '#311b92',
+                        borderRadius: '20px', padding: '2px 10px', fontSize: '12px', fontWeight: 500, whiteSpace: 'nowrap',
+                      }}>
+                        {p.estado}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 14px', color: '#1b5e20', whiteSpace: 'nowrap' }}>{fmt(p.ingresos_ars)}</td>
+                    <td style={{ padding: '10px 14px', color: '#b71c1c', whiteSpace: 'nowrap' }}>{fmt(p.egresos_ars)}</td>
+                    <td style={{ padding: '10px 14px', fontWeight: 700, color: resultadoArs >= 0 ? '#1b5e20' : '#b71c1c', whiteSpace: 'nowrap' }}>
+                      {resultadoArs >= 0 ? '+' : ''}{fmt(resultadoArs)}
+                    </td>
+                    <td style={{ padding: '10px 14px', color: '#0d47a1', whiteSpace: 'nowrap' }}>{fmt(p.ingresos_usd, 'USD')}</td>
+                    <td style={{ padding: '10px 14px', color: '#880e4f', whiteSpace: 'nowrap' }}>{fmt(p.egresos_usd, 'USD')}</td>
+                    <td style={{ padding: '10px 14px', fontWeight: 700, color: resultadoUsd >= 0 ? '#0d47a1' : '#880e4f', whiteSpace: 'nowrap' }}>
+                      {resultadoUsd >= 0 ? '+' : ''}{fmt(resultadoUsd, 'USD')}
+                    </td>
+                    <td style={{ padding: '10px 14px', color: '#666', whiteSpace: 'nowrap' }}>{fmtH(p.horas_totales)}</td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                      <Boton variante="secundario" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => onVerReporte(p.id)}>Ver reporte</Boton>
+                    </td>
+                  </tr>
+                );
+              })
+            }
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
