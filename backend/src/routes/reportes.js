@@ -154,8 +154,8 @@ router.get('/general', async (req, res) => {
     `SELECT p.id, p.nombre AS proyecto, c.nombre_razon_social AS cliente, p.estado,
             COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'ARS' ${condI}), 0) AS ingresos_ars,
             COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'USD' ${condI}), 0) AS ingresos_usd,
-            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'ARS' ${condE}), 0) AS egresos_ars,
-            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'USD' ${condE}), 0) AS egresos_usd,
+            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'ARS' AND e2.categoria != 'dibujantes' ${condE}), 0) AS egresos_ars,
+            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'USD' AND e2.categoria != 'dibujantes' ${condE}), 0) AS egresos_usd,
             COALESCE((SELECT SUM(h2.costo_total) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS costo_horas,
             COALESCE((SELECT SUM(h2.horas) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS horas_totales
      FROM proyectos p
