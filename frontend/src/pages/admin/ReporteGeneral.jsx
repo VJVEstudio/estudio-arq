@@ -96,7 +96,7 @@ function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
             {proyectos.length === 0
               ? <tr><td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: '#999' }}>Sin proyectos en este período</td></tr>
               : proyectos.map(p => {
-                const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars) - Number(p.costo_horas);
+                const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars);
                 const resultadoUsd = Number(p.ingresos_usd) - Number(p.egresos_usd);
                 const resultadoTotalArs = resultadoArs + (resultadoUsd * Number(cotizacion || 0));
                 return (
