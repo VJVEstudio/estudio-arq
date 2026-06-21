@@ -243,7 +243,7 @@ export default function ReporteGeneral() {
       {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Generando reporte…</p>
       : reporte && (
         <>
-          <TarjetasTotales ingresos={reporte.ingresos} egresos={reporte.egresos} />
+          <TarjetasTotales ingresos={reporte.ingresos} egresos={reporte.egresos} porProyecto={reporte.por_proyecto} />
           <EgresosPorCategoria egresos={reporte.egresos} />
           <TablaPorProyecto proyectos={reporte.por_proyecto} onVerReporte={(id) => navigate(`/admin/reportes/proyecto/${id}`)} cotizacion={reporte.cotizacion_oficial} />
           <TablaDibujantes dibujantes={reporte.por_dibujante} />
