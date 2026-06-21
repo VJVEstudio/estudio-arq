@@ -244,6 +244,7 @@ export default function ReporteGeneral() {
       : reporte && (
         <>
           <TarjetasTotales ingresos={reporte.ingresos} egresos={reporte.egresos} porProyecto={reporte.por_proyecto} />
+          function TarjetasTotales({ ingresos, egresos, porProyecto }) {
           <EgresosPorCategoria egresos={reporte.egresos} />
           <TablaPorProyecto proyectos={reporte.por_proyecto} onVerReporte={(id) => navigate(`/admin/reportes/proyecto/${id}`)} cotizacion={reporte.cotizacion_oficial} />
           <TablaDibujantes dibujantes={reporte.por_dibujante} />
