@@ -48,10 +48,16 @@ router.get('/', async (req, res) => {
        FROM egreso_socios es JOIN egresos e ON e.id = es.egreso_id
        GROUP BY es.socio_id, e.moneda`
     );
+    // El socio que cobró personalmente tiene la plata física → le deben restar
+    // la parte que NO le corresponde a él (la de los otros 2 socios)
     const { rows: cobrosPersonales } = await query(
-      `SELECT socio_id, moneda, SUM(monto) AS total_cobrado
-       FROM ingresos WHERE es_del_estudio = FALSE
-       GROUP BY socio_id, moneda`
+      `SELECT i.socio_id, i.moneda, 
+              SUM(i.monto) - SUM(isc.monto_asignado) AS total_a_repartir
+       FROM ingresos i
+       JOIN ingreso_socios isc ON isc.ingreso_id = i.id AND isc.socio_id = i.socio_id
+       WHERE i.es_del_estudio = FALSE
+       GROUP BY i.socio_id, i.moneda`
+    );
     );
     const { rows: partesIngresos } = await query(
       `SELECT isc.socio_id, i.moneda, SUM(isc.monto_asignado) AS total_asignado
@@ -75,7 +81,7 @@ router.get('/', async (req, res) => {
     };
     sumar(pagosPropios,    'socio_id', 'moneda', 'total_pagado',   +1);
     sumar(deudaEgresos,    'socio_id', 'moneda', 'total_adeudado', -1);
-    sumar(cobrosPersonales,'socio_id', 'moneda', 'total_cobrado',  -1);
+    sumar(cobrosPersonales,'socio_id', 'moneda', 'total_a_repartir',  -1);
     sumar(partesIngresos,  'socio_id', 'moneda', 'total_asignado', +1);
     liquidaciones.forEach(l => {
       if (saldos[l.socio_pagador_id])  saldos[l.socio_pagador_id][l.moneda]  -= Number(l.total);
