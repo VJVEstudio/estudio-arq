@@ -79,7 +79,7 @@ function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
         <p style={{ margin: 0, fontWeight: 500 }}>Resultado por proyecto</p>
         {cotizacion && (
           <span style={{ fontSize: '12px', color: '#666' }}>
-            Dólar oficial: <strong>$ {Number(cotizacion).toLocaleString('es-AR')}</strong>
+            Dólar oficial (hoy): <strong>$ {Number(cotizacion).toLocaleString('es-AR')}</strong>
           </span>
         )}
       </div>
@@ -97,8 +97,9 @@ function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
               ? <tr><td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: '#999' }}>Sin proyectos en este período</td></tr>
               : proyectos.map(p => {
                 const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars);
-                const resultadoUsd = Number(p.ingresos_usd) - Number(p.egresos_usd);
-                const resultadoTotalArs = resultadoArs + (resultadoUsd * Number(cotizacion || 0));
+                // Usar los montos USD ya convertidos con la cotización histórica de cada registro
+                const usdConvertido = Number(p.ingresos_usd_convertido || 0) - Number(p.egresos_usd_convertido || 0);
+                const resultadoTotalArs = resultadoArs + usdConvertido;
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #e0e0e0' }}>
                     <td style={{ padding: '10px 14px', fontWeight: 500, whiteSpace: 'nowrap' }}>{p.proyecto}</td>
