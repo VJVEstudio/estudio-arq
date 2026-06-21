@@ -2,7 +2,6 @@
 const cache = {};
 
 async function obtenerCotizacionOficial(fecha) {
-  // Si no se pasa fecha, usamos hoy
   const fechaConsulta = fecha || new Date().toISOString().split('T')[0];
 
   if (cache[fechaConsulta]) {
@@ -10,20 +9,21 @@ async function obtenerCotizacionOficial(fecha) {
   }
 
   try {
-    // DolarAPI histórico: /v1/cotizaciones/historicas/{tipo}/{fecha}
-    // Formato de fecha: DD-MM-YYYY
-    const [anio, mes, dia] = fechaConsulta.split('-');
-    const fechaFormato = `${dia}-${mes}-${anio}`;
+    // ArgentinaDatos API: formato YYYY/MM/DD
+    const fechaFormato = fechaConsulta.replace(/-/g, '/');
 
-    const resp = await fetch(`https://dolarapi.com/v1/cotizaciones/historicas/oficial/${fechaFormato}`);
+    const resp = await fetch(`https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial/${fechaFormato}`);
 
     if (resp.ok) {
       const data = await resp.json();
-      cache[fechaConsulta] = data.venta;
-      return data.venta;
+      if (data && data.venta) {
+        cache[fechaConsulta] = data.venta;
+        return data.venta;
+      }
     }
 
-    // Si falla (fecha muy vieja o feriado), buscamos la cotización del día
+    // Si no hay dato para esa fecha exacta (fin de semana/feriado),
+    // usamos la cotización actual como respaldo
     const respHoy = await fetch('https://dolarapi.com/v1/dolares/oficial');
     const dataHoy = await respHoy.json();
     cache[fechaConsulta] = dataHoy.venta;
