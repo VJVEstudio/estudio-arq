@@ -38,62 +38,89 @@ function calcularTransferenciasMinimas(saldos, socios, monedas) {
 
 router.get('/', async (req, res) => {
   try {
-    const { rows: pagosPropios } = await query(
-      `SELECT socio_id, moneda, SUM(monto) AS total_pagado
-       FROM egresos WHERE pagado_por_estudio = FALSE
-       GROUP BY socio_id, moneda`
-    );
-    const { rows: deudaEgresos } = await query(
-      `SELECT es.socio_id, e.moneda, SUM(es.monto_adeudado) AS total_adeudado
-       FROM egreso_socios es JOIN egresos e ON e.id = es.egreso_id
-       GROUP BY es.socio_id, e.moneda`
+    const { rows: socios } = await query(
+      `SELECT * FROM socios WHERE activo = TRUE ORDER BY nombre`
     );
 
-    // El socio que cobró personalmente tiene la plata física → debe restar
-    // la parte que NO le corresponde a él (la de los otros 2 socios)
-    const { rows: cobrosPersonales } = await query(
-      `SELECT i.socio_id, i.moneda,
-              SUM(i.monto) - SUM(isc.monto_asignado) AS total_a_repartir
-       FROM ingresos i
-       JOIN ingreso_socios isc ON isc.ingreso_id = i.id AND isc.socio_id = i.socio_id
-       WHERE i.es_del_estudio = FALSE
-       GROUP BY i.socio_id, i.moneda`
+    const monedas = ['ARS', 'USD'];
+    const saldos = {};
+    socios.forEach(s => { saldos[s.id] = { ARS: 0, USD: 0, nombre: s.nombre }; });
+
+    // ===== EGRESOS =====
+    // Si un socio pagó de su bolsillo: él tiene saldo A FAVOR (le deben)
+    // Los demás tienen saldo EN CONTRA por su parte proporcional
+    const { rows: egresosSocio } = await query(
+      `SELECT id, monto, moneda, socio_id
+       FROM egresos
+       WHERE pagado_por_estudio = FALSE`
     );
 
-    const { rows: partesIngresos } = await query(
-      `SELECT isc.socio_id, i.moneda, SUM(isc.monto_asignado) AS total_asignado
-       FROM ingreso_socios isc JOIN ingresos i ON i.id = isc.ingreso_id
-       GROUP BY isc.socio_id, i.moneda`
+    for (const egreso of egresosSocio) {
+      const { rows: distribucion } = await query(
+        `SELECT socio_id, monto_adeudado
+         FROM egreso_socios
+         WHERE egreso_id = $1`,
+        [egreso.id]
+      );
+      // El que pagó recibe el monto completo a favor
+      if (saldos[egreso.socio_id]) {
+        saldos[egreso.socio_id][egreso.moneda] += Number(egreso.monto);
+      }
+      // Cada socio (incluyendo el que pagó) debe su parte proporcional
+      distribucion.forEach(d => {
+        if (saldos[d.socio_id]) {
+          saldos[d.socio_id][egreso.moneda] -= Number(d.monto_adeudado);
+        }
+      });
+    }
+
+    // ===== INGRESOS =====
+    // Si un socio cobró personalmente: él tiene saldo EN CONTRA (debe)
+    // porque tiene plata que no es 100% suya.
+    // Los demás tienen saldo A FAVOR por su parte proporcional.
+    const { rows: ingresosSocio } = await query(
+      `SELECT id, monto, moneda, socio_id
+       FROM ingresos
+       WHERE es_del_estudio = FALSE`
     );
+
+    for (const ingreso of ingresosSocio) {
+      const { rows: distribucion } = await query(
+        `SELECT socio_id, monto_asignado
+         FROM ingreso_socios
+         WHERE ingreso_id = $1`,
+        [ingreso.id]
+      );
+      // El que cobró debe el monto completo (tiene la plata física)
+      if (saldos[ingreso.socio_id]) {
+        saldos[ingreso.socio_id][ingreso.moneda] -= Number(ingreso.monto);
+      }
+      // Cada socio (incluyendo el que cobró) recibe su parte proporcional a favor
+      distribucion.forEach(d => {
+        if (saldos[d.socio_id]) {
+          saldos[d.socio_id][ingreso.moneda] += Number(d.monto_asignado);
+        }
+      });
+    }
+
+    // ===== LIQUIDACIONES =====
+    // Transferencias ya realizadas entre socios para saldar cuentas
     const { rows: liquidaciones } = await query(
       `SELECT socio_pagador_id, socio_receptor_id, moneda, SUM(monto) AS total
        FROM liquidaciones GROUP BY socio_pagador_id, socio_receptor_id, moneda`
     );
-    const { rows: socios } = await query(
-      `SELECT * FROM socios WHERE activo = TRUE ORDER BY nombre`
-    );
-    const monedas = ['ARS', 'USD'];
-    const saldos  = {};
-    socios.forEach(s => { saldos[s.id] = { ARS: 0, USD: 0, nombre: s.nombre }; });
-    const sumar = (arr, idKey, monedaKey, montoKey, signo = 1) => {
-      arr.forEach(r => {
-        if (saldos[r[idKey]]) saldos[r[idKey]][r[monedaKey]] += signo * Number(r[montoKey]);
-      });
-    };
-    sumar(pagosPropios,    'socio_id', 'moneda', 'total_pagado',   +1);
-    sumar(deudaEgresos,    'socio_id', 'moneda', 'total_adeudado', -1);
-    sumar(cobrosPersonales,'socio_id', 'moneda', 'total_a_repartir', -1);
-    sumar(partesIngresos,  'socio_id', 'moneda', 'total_asignado', +1);
     liquidaciones.forEach(l => {
       if (saldos[l.socio_pagador_id])  saldos[l.socio_pagador_id][l.moneda]  -= Number(l.total);
       if (saldos[l.socio_receptor_id]) saldos[l.socio_receptor_id][l.moneda] += Number(l.total);
     });
+
     const transferencias = calcularTransferenciasMinimas(saldos, socios, monedas);
+
     res.json({
       socios: socios.map(s => ({
         ...s,
-        saldo_ARS: saldos[s.id].ARS,
-        saldo_USD: saldos[s.id].USD,
+        saldo_ARS: Math.round(saldos[s.id].ARS * 100) / 100,
+        saldo_USD: Math.round(saldos[s.id].USD * 100) / 100,
       })),
       transferencias,
     });
