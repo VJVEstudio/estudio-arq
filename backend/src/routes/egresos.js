@@ -1,6 +1,7 @@
 const express = require('express');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
+const { obtenerCotizacionOficial } = require('../utils/cotizacion');
 
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
@@ -82,18 +83,16 @@ router.post('/', async (req, res) => {
   if (!pagado_por_estudio && !socio_id) {
     return res.status(400).json({ error: 'Si no pagó el estudio, se debe indicar el socio_id' });
   }
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+const cotizacion_dolar = moneda === 'USD' ? await obtenerCotizacionOficial() : null;
     const { rows } = await client.query(
       `INSERT INTO egresos
          (destinatario_id, proyecto_id, categoria, monto, moneda,
-          pagado_por_estudio, socio_id, fecha, comprobante, descripcion)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+          pagado_por_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [destinatario_id, proyecto_id || null, categoria, monto, moneda,
        pagado_por_estudio ?? true, pagado_por_estudio ? null : socio_id,
        fecha || new Date().toISOString().split('T')[0],
-       comprobante || null, descripcion || null]
+       comprobante || null, descripcion || null, cotizacion_dolar]
     );
     await client.query(`SELECT distribuir_egreso($1)`, [rows[0].id]);
     await client.query('COMMIT');
