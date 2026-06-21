@@ -23,10 +23,19 @@ function BarraHorizontal({ valor, maximo, color }) {
   );
 }
 
-function TarjetasTotales({ ingresos, egresos }) {
+function TarjetasTotales({ ingresos, egresos, porProyecto }) {
   const tot = { ARS: { ing: 0, egr: 0 }, USD: { ing: 0, egr: 0 } };
   ingresos.forEach(r => { tot[r.moneda].ing += Number(r.total); });
   egresos.forEach(r =>  { tot[r.moneda].egr += Number(r.total); });
+
+  // Sumar el resultado total convertido de todos los proyectos
+  // (cada proyecto ya usa la cotización histórica de cada registro)
+  const resultadoTotalConvertido = (porProyecto || []).reduce((acc, p) => {
+    const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars);
+    const usdConvertido = Number(p.ingresos_usd_convertido || 0) - Number(p.egresos_usd_convertido || 0);
+    return acc + resultadoArs + usdConvertido;
+  }, 0);
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '28px' }}>
       {[
@@ -36,6 +45,7 @@ function TarjetasTotales({ ingresos, egresos }) {
         { label: 'Ingresos USD',  valor: fmt(tot.USD.ing, 'USD'), color: '#0d47a1' },
         { label: 'Egresos USD',   valor: fmt(tot.USD.egr, 'USD'), color: '#880e4f' },
         { label: 'Resultado USD', valor: fmt(tot.USD.ing - tot.USD.egr, 'USD'), color: tot.USD.ing - tot.USD.egr >= 0 ? '#0d47a1' : '#880e4f' },
+        { label: 'Resultado total ($)', valor: fmt(resultadoTotalConvertido, 'ARS'), color: resultadoTotalConvertido >= 0 ? '#1b5e20' : '#b71c1c' },
       ].map(t => (
         <div key={t.label} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 18px' }}>
           <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</p>
