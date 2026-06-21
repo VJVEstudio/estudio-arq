@@ -61,10 +61,10 @@ router.get('/:id', async (req, res) => {
             )) FILTER (WHERE esc.id IS NOT NULL), '[]') AS distribucion
      FROM egresos e
      JOIN destinatarios d ON d.id = e.destinatario_id
-     LEFT JOIN proyectos p ON p.id = e.proyecto_id
-     LEFT JOIN socios    s ON s.id = e.socio_id
-     LEFT JOIN egreso_socios esc ON esc.egreso_id = e.id
-     LEFT JOIN socios        sc  ON sc.id = esc.socio_id
+     LEFT JOIN proyectos      p   ON p.id = e.proyecto_id
+     LEFT JOIN socios         s   ON s.id = e.socio_id
+     LEFT JOIN egreso_socios  esc ON esc.egreso_id = e.id
+     LEFT JOIN socios         sc  ON sc.id = esc.socio_id
      WHERE e.id = $1
      GROUP BY e.id, d.nombre, p.nombre, s.nombre`,
     [req.params.id]
@@ -74,8 +74,11 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { destinatario_id, proyecto_id, categoria, monto, moneda,
-          pagado_por_estudio, socio_id, fecha, comprobante, descripcion } = req.body;
+  const {
+    destinatario_id, proyecto_id, categoria, monto, moneda,
+    pagado_por_estudio, socio_id, fecha, comprobante, descripcion,
+  } = req.body;
+
   if (!destinatario_id)         return res.status(400).json({ error: 'destinatario_id es obligatorio' });
   if (!categoria)               return res.status(400).json({ error: 'La categoría es obligatoria' });
   if (!monto || monto <= 0)     return res.status(400).json({ error: 'El monto debe ser mayor a 0' });
@@ -83,20 +86,60 @@ router.post('/', async (req, res) => {
   if (!pagado_por_estudio && !socio_id) {
     return res.status(400).json({ error: 'Si no pagó el estudio, se debe indicar el socio_id' });
   }
-const cotizacion_dolar = moneda === 'USD' ? await obtenerCotizacionOficial() : null;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const cotizacion_dolar = moneda === 'USD' ? await obtenerCotizacionOficial() : null;
+
     const { rows } = await client.query(
       `INSERT INTO egresos
          (destinatario_id, proyecto_id, categoria, monto, moneda,
           pagado_por_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [destinatario_id, proyecto_id || null, categoria, monto, moneda,
-       pagado_por_estudio ?? true, pagado_por_estudio ? null : socio_id,
-       fecha || new Date().toISOString().split('T')[0],
-       comprobante || null, descripcion || null, cotizacion_dolar]
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [
+        destinatario_id,
+        proyecto_id || null,
+        categoria,
+        monto,
+        moneda,
+        pagado_por_estudio ?? true,
+        pagado_por_estudio ? null : socio_id,
+        fecha || new Date().toISOString().split('T')[0],
+        comprobante || null,
+        descripcion || null,
+        cotizacion_dolar,
+      ]
     );
-    await client.query(`SELECT distribuir_egreso($1)`, [rows[0].id]);
+    const egreso = rows[0];
+
+    await client.query(`SELECT distribuir_egreso($1)`, [egreso.id]);
+
     await client.query('COMMIT');
-    res.status(201).json(rows[0]);
+
+    const { rows: completo } = await client.query(
+      `SELECT e.*,
+              d.nombre AS destinatario_nombre,
+              COALESCE(
+                json_agg(json_build_object(
+                  'socio_id', esc.socio_id,
+                  'socio_nombre', sc.nombre,
+                  'monto_adeudado', esc.monto_adeudado,
+                  'porcentaje', esc.porcentaje
+                )) FILTER (WHERE esc.id IS NOT NULL), '[]'
+              ) AS distribucion
+       FROM egresos e
+       JOIN destinatarios d ON d.id = e.destinatario_id
+       LEFT JOIN egreso_socios esc ON esc.egreso_id = e.id
+       LEFT JOIN socios sc ON sc.id = esc.socio_id
+       WHERE e.id = $1
+       GROUP BY e.id, d.nombre`,
+      [egreso.id]
+    );
+    res.status(201).json(completo[0]);
+
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error creando egreso:', err);
@@ -107,30 +150,43 @@ const cotizacion_dolar = moneda === 'USD' ? await obtenerCotizacionOficial() : n
 });
 
 router.put('/:id', async (req, res) => {
-  const { destinatario_id, proyecto_id, categoria, monto, moneda,
-          pagado_por_estudio, socio_id, fecha, comprobante, descripcion } = req.body;
+  const {
+    destinatario_id, proyecto_id, categoria, monto, moneda,
+    pagado_por_estudio, socio_id, fecha, comprobante, descripcion,
+  } = req.body;
+
   if (!monto || monto <= 0) return res.status(400).json({ error: 'El monto debe ser mayor a 0' });
   if (!pagado_por_estudio && !socio_id) {
     return res.status(400).json({ error: 'Si no pagó el estudio, se debe indicar el socio_id' });
   }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const { rows } = await client.query(
       `UPDATE egresos SET destinatario_id=$1, proyecto_id=$2, categoria=$3, monto=$4, moneda=$5,
          pagado_por_estudio=$6, socio_id=$7, fecha=$8, comprobante=$9, descripcion=$10
        WHERE id=$11 RETURNING *`,
-      [destinatario_id, proyecto_id || null, categoria, monto, moneda,
-       pagado_por_estudio ?? true, pagado_por_estudio ? null : socio_id,
-       fecha, comprobante || null, descripcion || null, req.params.id]
+      [
+        destinatario_id, proyecto_id || null, categoria, monto, moneda,
+        pagado_por_estudio ?? true,
+        pagado_por_estudio ? null : socio_id,
+        fecha, comprobante || null, descripcion || null,
+        req.params.id,
+      ]
     );
     if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Egreso no encontrado' }); }
+
     await client.query(`DELETE FROM egreso_socios WHERE egreso_id = $1`, [req.params.id]);
     await client.query(`SELECT distribuir_egreso($1)`, [req.params.id]);
+
     await client.query('COMMIT');
     res.json(rows[0]);
+
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('Error actualizando egreso:', err);
     res.status(500).json({ error: 'Error al actualizar el egreso' });
   } finally {
     client.release();
@@ -138,7 +194,9 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  const { rows } = await query(`DELETE FROM egresos WHERE id=$1 RETURNING id`, [req.params.id]);
+  const { rows } = await query(
+    `DELETE FROM egresos WHERE id=$1 RETURNING id`, [req.params.id]
+  );
   if (!rows[0]) return res.status(404).json({ error: 'Egreso no encontrado' });
   res.status(204).send();
 });
