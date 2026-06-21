@@ -110,8 +110,8 @@ router.get('/', async (req, res) => {
        FROM liquidaciones GROUP BY socio_pagador_id, socio_receptor_id, moneda`
     );
     liquidaciones.forEach(l => {
-      if (saldos[l.socio_pagador_id])  saldos[l.socio_pagador_id][l.moneda]  -= Number(l.total);
-      if (saldos[l.socio_receptor_id]) saldos[l.socio_receptor_id][l.moneda] += Number(l.total);
+      if (saldos[l.socio_pagador_id])  saldos[l.socio_pagador_id][l.moneda]  += Number(l.total);
+      if (saldos[l.socio_receptor_id]) saldos[l.socio_receptor_id][l.moneda] -= Number(l.total);
     });
 
     const transferencias = calcularTransferenciasMinimas(saldos, socios, monedas);
