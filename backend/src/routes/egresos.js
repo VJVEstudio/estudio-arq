@@ -91,8 +91,8 @@ router.post('/', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const cotizacion_dolar = moneda === 'USD' ? await obtenerCotizacionOficial() : null;
-
+const fechaEgreso = fecha || new Date().toISOString().split('T')[0];
+    const cotizacion_dolar = moneda === 'USD' ? await obtenerCotizacionOficial(fechaEgreso) : null;
     const { rows } = await client.query(
       `INSERT INTO egresos
          (destinatario_id, proyecto_id, categoria, monto, moneda,
