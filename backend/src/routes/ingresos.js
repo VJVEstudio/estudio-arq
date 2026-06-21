@@ -1,6 +1,7 @@
 const express = require('express');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
+const { obtenerCotizacionOficial } = require('../utils/cotizacion');
 
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
@@ -89,14 +90,15 @@ router.post('/', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const cotizacion_dolar = moneda === 'USD' ? await obtenerCotizacionOficial() : null;
     const { rows } = await client.query(
       `INSERT INTO ingresos
-         (cliente_id, proyecto_id, monto, moneda, tipo, es_del_estudio, socio_id, fecha, comprobante, descripcion)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+         (cliente_id, proyecto_id, monto, moneda, tipo, es_del_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [cliente_id, proyecto_id || null, monto, moneda, tipo,
        es_del_estudio ?? true, es_del_estudio ? null : socio_id,
        fecha || new Date().toISOString().split('T')[0],
-       comprobante || null, descripcion || null]
+       comprobante || null, descripcion || null, cotizacion_dolar]
     );
     await client.query(`SELECT distribuir_ingreso($1)`, [rows[0].id]);
     await client.query('COMMIT');
