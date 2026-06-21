@@ -1,24 +1,8 @@
 const express = require('express');
 const { query } = require('../db');
 const auth = require('../middleware/auth');
-// Cache simple para no pedir la cotización en cada request
-let cotizacionCache = { valor: null, fecha: null };
+const { obtenerCotizacionOficial } = require('../utils/cotizacion');
 
-async function obtenerCotizacionOficial() {
-  const hoy = new Date().toISOString().split('T')[0];
-  if (cotizacionCache.fecha === hoy && cotizacionCache.valor) {
-    return cotizacionCache.valor;
-  }
-  try {
-    const resp = await fetch('https://dolarapi.com/v1/dolares/oficial');
-    const data = await resp.json();
-    cotizacionCache = { valor: data.venta, fecha: hoy };
-    return data.venta;
-  } catch (err) {
-    console.error('Error obteniendo cotización:', err);
-    return cotizacionCache.valor || 1000; // fallback
-  }
-}
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
 
@@ -31,7 +15,7 @@ router.get('/proyecto/:id', async (req, res) => {
   if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado' });
   const { rows: ingresos } = await query(
     `SELECT i.fecha, i.monto, i.moneda, i.tipo, i.comprobante, i.descripcion,
-            i.es_del_estudio, s.nombre AS socio_nombre,
+            i.es_del_estudio, i.cotizacion_dolar, s.nombre AS socio_nombre,
             COALESCE(json_agg(json_build_object('socio', sc.nombre, 'monto', isc.monto_asignado))
               FILTER (WHERE isc.id IS NOT NULL), '[]') AS distribucion
      FROM ingresos i
@@ -42,7 +26,7 @@ router.get('/proyecto/:id', async (req, res) => {
   );
   const { rows: egresos } = await query(
     `SELECT e.fecha, e.monto, e.moneda, e.categoria, e.comprobante, e.descripcion,
-            e.pagado_por_estudio, d.nombre AS destinatario_nombre, s.nombre AS socio_nombre
+            e.pagado_por_estudio, e.cotizacion_dolar, d.nombre AS destinatario_nombre, s.nombre AS socio_nombre
      FROM egresos e
      JOIN destinatarios d ON d.id = e.destinatario_id
      LEFT JOIN socios s ON s.id = e.socio_id
@@ -70,12 +54,25 @@ router.get('/proyecto/:id', async (req, res) => {
     ...egresos.map(e => ({ fecha: e.fecha, tipo: 'egreso', ...e })),
     ...horas.map(h => ({ fecha: h.fecha, tipo: 'horas', ...h })),
   ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+  // Resultado total en pesos usando la cotización guardada de cada registro en USD
+  const cotizacionActual = await obtenerCotizacionOficial();
+  let resultadoTotalConvertido = totales.ARS.ingresos - totales.ARS.egresos;
+  ingresos.filter(i => i.moneda === 'USD').forEach(i => {
+    resultadoTotalConvertido += Number(i.monto) * Number(i.cotizacion_dolar || cotizacionActual);
+  });
+  egresos.filter(e => e.moneda === 'USD').forEach(e => {
+    resultadoTotalConvertido -= Number(e.monto) * Number(e.cotizacion_dolar || cotizacionActual);
+  });
+  resultadoTotalConvertido -= costoHoras;
+
   res.json({
     proyecto, ingresos, egresos, horas,
     totales: {
       ARS: { ingresos: totales.ARS.ingresos, egresos: totales.ARS.egresos, resultado: totales.ARS.ingresos - totales.ARS.egresos },
       USD: { ingresos: totales.USD.ingresos, egresos: totales.USD.egresos, resultado: totales.USD.ingresos - totales.USD.egresos },
     },
+    resultado_total_convertido: resultadoTotalConvertido,
     horas_resumen: { total_horas: horasTotales, costo_total: costoHoras, por_dibujante: porDibujante },
     timeline,
   });
@@ -121,8 +118,7 @@ router.get('/proyecto/:id/csv', async (req, res) => {
 
 router.get('/general', async (req, res) => {
   const { desde, hasta } = req.query;
-  const cotizacionOficial = await obtenerCotizacionOficial();
-  const params = [];
+  const cotizacionActual = await obtenerCotizacionOficial();
   const whereI = [];
   const whereE = [];
   const whereH = [];
@@ -158,7 +154,15 @@ router.get('/general', async (req, res) => {
               + COALESCE((SELECT SUM(h2.costo_total) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS egresos_ars,
             COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'USD' AND e2.categoria != 'dibujantes' ${condE}), 0) AS egresos_usd,
             COALESCE((SELECT SUM(h2.costo_total) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS costo_horas,
-            COALESCE((SELECT SUM(h2.horas) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS horas_totales
+            COALESCE((SELECT SUM(h2.horas) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS horas_totales,
+            COALESCE((
+              SELECT SUM(i3.monto * COALESCE(i3.cotizacion_dolar, ${cotizacionActual}))
+              FROM ingresos i3 WHERE i3.proyecto_id = p.id AND i3.moneda = 'USD' ${condI}
+            ), 0) AS ingresos_usd_convertido,
+            COALESCE((
+              SELECT SUM(e3.monto * COALESCE(e3.cotizacion_dolar, ${cotizacionActual}))
+              FROM egresos e3 WHERE e3.proyecto_id = p.id AND e3.moneda = 'USD' AND e3.categoria != 'dibujantes' ${condE}
+            ), 0) AS egresos_usd_convertido
      FROM proyectos p
      JOIN clientes c ON c.id = p.cliente_id
      GROUP BY p.id, p.nombre, c.nombre_razon_social, p.estado
@@ -182,9 +186,10 @@ router.get('/general', async (req, res) => {
      GROUP BY d.id, d.nombre ORDER BY horas_totales DESC`
   );
   const { rows: balanceSocios } = await query(`SELECT * FROM v_balance_socios`);
+
   res.json({
     periodo: { desde: desde || null, hasta: hasta || null },
-    cotizacion_oficial: cotizacionOficial,
+    cotizacion_oficial: cotizacionActual,
     ingresos: ingresosResumen,
     egresos: egresosResumen,
     por_proyecto: porProyecto,
