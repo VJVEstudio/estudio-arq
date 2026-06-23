@@ -68,8 +68,7 @@ function FormNuevoDibujante({ onGuardar, onCancelar, guardando, errorServidor })
 
 function PanelDetalle({ dibujante, onActualizar, onCerrar }) {
   const [tab,        setTab]        = useState('info');
-  const [formInfo,   setFormInfo]   = useState({ nombre: dibujante.nombre, fecha_inicio: dibujante.fecha_inicio?.split('T')[0] || '', activo: dibujante.usuario_activo });
-  const [formCAC,    setFormCAC]    = useState({ indice_cac: '', motivo: '' });
+const [formInfo,   setFormInfo]   = useState({ nombre: dibujante.nombre, fecha_inicio: dibujante.fecha_inicio?.split('T')[0] || '', activo: dibujante.usuario_activo });  const [formCAC,    setFormCAC]    = useState({ indice_cac: '', motivo: '' });
   const [guardando,  setGuardando]  = useState(false);
   const [errorLocal, setErrorLocal] = useState('');
   const [historial,  setHistorial]  = useState(dibujante.historial_tarifas || []);
