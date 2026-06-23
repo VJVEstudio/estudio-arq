@@ -131,6 +131,13 @@ function PanelDetalle({ dibujante, onActualizar, onCerrar }) {
       {tab === 'info' && (
         <form onSubmit={handleGuardarInfo}>
           <Campo label="Nombre"><Input value={formInfo.nombre} onChange={setI('nombre')} /></Campo>
+          <Campo label="Tarifa por hora ($ ARS)">
+            <Input
+              type="number" min="0" step="0.01"
+              value={formInfo.tarifa_hora_base ?? dibujante.tarifa_hora_base}
+              onChange={setI('tarifa_hora_base')}
+            />
+          </Campo>
           <Campo label="Fecha de inicio"><Input type="date" value={formInfo.fecha_inicio} onChange={setI('fecha_inicio')} /></Campo>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '20px', cursor: 'pointer' }}>
             <input type="checkbox" checked={formInfo.activo} onChange={setI('activo')} />
