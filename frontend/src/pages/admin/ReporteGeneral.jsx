@@ -28,8 +28,6 @@ function TarjetasTotales({ ingresos, egresos, porProyecto }) {
   ingresos.forEach(r => { tot[r.moneda].ing += Number(r.total); });
   egresos.forEach(r =>  { tot[r.moneda].egr += Number(r.total); });
 
-  // Sumar el resultado total convertido de todos los proyectos
-  // (cada proyecto ya usa la cotización histórica de cada registro)
   const resultadoTotalConvertido = (porProyecto || []).reduce((acc, p) => {
     const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars);
     const usdConvertido = Number(p.ingresos_usd_convertido || 0) - Number(p.egresos_usd_convertido || 0);
@@ -107,7 +105,6 @@ function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
               ? <tr><td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: '#999' }}>Sin proyectos en este período</td></tr>
               : proyectos.map(p => {
                 const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars);
-                // Usar los montos USD ya convertidos con la cotización histórica de cada registro
                 const usdConvertido = Number(p.ingresos_usd_convertido || 0) - Number(p.egresos_usd_convertido || 0);
                 const resultadoTotalArs = resultadoArs + usdConvertido;
                 return (
@@ -244,7 +241,6 @@ export default function ReporteGeneral() {
       : reporte && (
         <>
           <TarjetasTotales ingresos={reporte.ingresos} egresos={reporte.egresos} porProyecto={reporte.por_proyecto} />
-          function TarjetasTotales({ ingresos, egresos, porProyecto }) {
           <EgresosPorCategoria egresos={reporte.egresos} />
           <TablaPorProyecto proyectos={reporte.por_proyecto} onVerReporte={(id) => navigate(`/admin/reportes/proyecto/${id}`)} cotizacion={reporte.cotizacion_oficial} />
           <TablaDibujantes dibujantes={reporte.por_dibujante} />
