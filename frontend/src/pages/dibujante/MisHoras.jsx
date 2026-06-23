@@ -35,10 +35,14 @@ function FormHoras({ inicial = {}, proyectos, onGuardar, onCancelar, guardando }
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <Campo label="Proyecto *" error={errores.proyecto_id}>
+     <Campo label="Proyecto *" error={errores.proyecto_id}>
         <Select value={form.proyecto_id} onChange={set('proyecto_id')}>
           <option value="">Seleccioná un proyecto…</option>
-          {proyectos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          {proyectos.map(p => (
+            <option key={p.id} value={p.id}>
+              {p.cliente_nombre ? `${p.cliente_nombre} - ${p.nombre}` : p.nombre}
+            </option>
+          ))}
         </Select>
       </Campo>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
