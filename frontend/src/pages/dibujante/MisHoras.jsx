@@ -5,25 +5,16 @@ import {
   Modal, Campo, Input, Select, Textarea, AlertaError,
 } from '../../components/ui';
 
-const fmtF = (f) => {
-  if (!f) return '—';
-  let fechaStr;
-  if (typeof f === 'string') {
-    fechaStr = f.split('T')[0];
-  } else {
-    // Es un objeto Date — extraemos año, mes, día en UTC para no perder un día
-    const d = new Date(f);
-    if (isNaN(d.getTime())) return '—';
-    const anio = d.getUTCFullYear();
-    const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dia = String(d.getUTCDate()).padStart(2, '0');
-    fechaStr = `${anio}-${mes}-${dia}`;
-  }
-  const d2 = new Date(fechaStr + 'T00:00:00');
-  if (isNaN(d2.getTime())) return '—';
-  return d2.toLocaleDateString('es-AR');
-};
-const AZUL = '#1a2744';
+function formatearFechaDibujante(valorFecha) {
+  if (!valorFecha) return '—';
+  const soloFecha = String(valorFecha).slice(0, 10);
+  const partes = soloFecha.split('-');
+  if (partes.length !== 3) return '—';
+  const [anio, mes, dia] = partes;
+  return `${dia}/${mes}/${anio}`;
+}
+
+const AZUL_DIBUJANTE = '#1a2744';
 
 function FormHoras({ inicial = {}, proyectos, onGuardar, onCancelar, guardando }) {
   const [form, setForm] = useState({
@@ -52,7 +43,7 @@ function FormHoras({ inicial = {}, proyectos, onGuardar, onCancelar, guardando }
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-     <Campo label="Proyecto *" error={errores.proyecto_id}>
+      <Campo label="Proyecto *" error={errores.proyecto_id}>
         <Select value={form.proyecto_id} onChange={set('proyecto_id')}>
           <option value="">Seleccioná un proyecto…</option>
           {proyectos.map(p => (
@@ -100,7 +91,7 @@ function ResumenProyectos({ horas }) {
         {proyectos.map(p => (
           <div key={p.nombre} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px', padding: '14px 16px' }}>
             <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#666', fontWeight: 500 }}>{p.nombre}</p>
-            <p style={{ margin: 0, fontSize: '22px', fontWeight: 600, color: AZUL }}>{Number(p.horas).toFixed(1)} h</p>
+            <p style={{ margin: 0, fontSize: '22px', fontWeight: 600, color: AZUL_DIBUJANTE }}>{Number(p.horas).toFixed(1)} h</p>
             <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#999' }}>{p.registros} registro{p.registros !== 1 ? 's' : ''}</p>
           </div>
         ))}
@@ -124,7 +115,7 @@ export default function MisHoras() {
     setCargando(true);
     setError(null);
     try {
-   const [h, p] = await Promise.all([get('/horas'), get('/proyectos?todos=true')]);
+      const [h, p] = await Promise.all([get('/horas'), get('/proyectos?todos=true')]);
       setHoras(h); setProyectos(p);
     } catch (err) { setError(err.message); }
     finally { setCargando(false); }
@@ -181,9 +172,9 @@ export default function MisHoras() {
               vacio="Todavía no cargaste horas. ¡Empezá ahora!"
               renderFila={(h) => (
                 <Fila key={h.id}>
-                  <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{fmtF(h.fecha)}</Celda>
+                  <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{formatearFechaDibujante(h.fecha)}</Celda>
                   <Celda><span style={{ fontWeight: 500 }}>{h.proyecto_nombre}</span></Celda>
-                  <Celda><span style={{ fontWeight: 600, color: AZUL }}>{Number(h.horas).toFixed(1)} h</span></Celda>
+                  <Celda><span style={{ fontWeight: 600, color: AZUL_DIBUJANTE }}>{Number(h.horas).toFixed(1)} h</span></Celda>
                   <Celda style={{ color: '#666', fontSize: '13px', maxWidth: '300px' }}>
                     <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                       {h.descripcion_tarea || '—'}
@@ -203,7 +194,7 @@ export default function MisHoras() {
       )}
 
       {modal && (
-        <Modal titulo={modal === 'crear' ? 'Cargar horas' : `Editar registro — ${fmtF(modal.fecha)}`} onCerrar={cerrarModal} ancho={500}>
+        <Modal titulo={modal === 'crear' ? 'Cargar horas' : `Editar registro — ${formatearFechaDibujante(modal.fecha)}`} onCerrar={cerrarModal} ancho={500}>
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
           <FormHoras inicial={modal === 'crear' ? {} : modal} proyectos={proyectos}
             onGuardar={handleGuardar} onCancelar={cerrarModal} guardando={guardando} />
@@ -213,7 +204,7 @@ export default function MisHoras() {
       {confirmElim && (
         <Modal titulo="Eliminar registro" onCerrar={() => setConfirmElim(null)} ancho={420}>
           <p style={{ fontSize: '14px', marginBottom: '8px' }}>
-            ¿Eliminás este registro de <strong>{Number(confirmElim.horas).toFixed(1)} horas</strong> del {fmtF(confirmElim.fecha)}?
+            ¿Eliminás este registro de <strong>{Number(confirmElim.horas).toFixed(1)} horas</strong> del {formatearFechaDibujante(confirmElim.fecha)}?
           </p>
           <p style={{ fontSize: '13px', color: '#666', marginBottom: '24px' }}>Proyecto: {confirmElim.proyecto_nombre}</p>
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
