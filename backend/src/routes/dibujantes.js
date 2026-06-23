@@ -118,15 +118,32 @@ router.post('/', auth.soloAdmin, async (req, res) => {
 });
 
 router.put('/:id', auth.soloAdmin, async (req, res) => {
-  const { nombre, fecha_inicio, activo } = req.body;
+  const { nombre, fecha_inicio, activo, tarifa_hora_base } = req.body;
   if (!nombre?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Si cambió la tarifa, guardamos el historial
+    if (tarifa_hora_base !== undefined) {
+      const { rows: actual } = await client.query(
+        `SELECT tarifa_hora_base FROM dibujantes WHERE id=$1`, [req.params.id]
+      );
+      const tarifaAnterior = Number(actual[0]?.tarifa_hora_base);
+      const tarifaNueva = Number(tarifa_hora_base);
+      if (tarifaAnterior !== tarifaNueva) {
+        await client.query(
+          `INSERT INTO tarifa_historial (dibujante_id, tarifa_anterior, tarifa_nueva, motivo, admin_id)
+           VALUES ($1, $2, $3, 'Edición manual', $4)`,
+          [req.params.id, tarifaAnterior, tarifaNueva, req.usuario.id]
+        );
+      }
+    }
+
     const { rows } = await client.query(
-      `UPDATE dibujantes SET nombre=$1, fecha_inicio=$2, updated_at=NOW()
-       WHERE id=$3 RETURNING *`,
-      [nombre.trim(), fecha_inicio, req.params.id]
+      `UPDATE dibujantes SET nombre=$1, fecha_inicio=$2, tarifa_hora_base=COALESCE($3, tarifa_hora_base), updated_at=NOW()
+       WHERE id=$4 RETURNING *`,
+      [nombre.trim(), fecha_inicio, tarifa_hora_base ?? null, req.params.id]
     );
     if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Dibujante no encontrado' }); }
     if (activo !== undefined) {
@@ -136,6 +153,7 @@ router.put('/:id', auth.soloAdmin, async (req, res) => {
     res.json(rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('Error actualizando dibujante:', err);
     res.status(500).json({ error: 'Error al actualizar el dibujante' });
   } finally {
     client.release();
