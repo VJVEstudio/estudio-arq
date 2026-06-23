@@ -5,7 +5,13 @@ import {
   Modal, Campo, Input, Select, Textarea, AlertaError,
 } from '../../components/ui';
 
-const fmtF = (f) => f ? new Date(f + 'T00:00:00').toLocaleDateString('es-AR') : '—';
+const fmtF = (f) => {
+  if (!f) return '—';
+  const fecha = typeof f === 'string' ? f.split('T')[0] : f;
+  const d = new Date(fecha + 'T00:00:00');
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-AR');
+};
 const AZUL = '#1a2744';
 
 function FormHoras({ inicial = {}, proyectos, onGuardar, onCancelar, guardando }) {
