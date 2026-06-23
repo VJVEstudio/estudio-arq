@@ -7,10 +7,21 @@ import {
 
 const fmtF = (f) => {
   if (!f) return '—';
-  const fecha = typeof f === 'string' ? f.split('T')[0] : f;
-  const d = new Date(fecha + 'T00:00:00');
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-AR');
+  let fechaStr;
+  if (typeof f === 'string') {
+    fechaStr = f.split('T')[0];
+  } else {
+    // Es un objeto Date — extraemos año, mes, día en UTC para no perder un día
+    const d = new Date(f);
+    if (isNaN(d.getTime())) return '—';
+    const anio = d.getUTCFullYear();
+    const mes = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dia = String(d.getUTCDate()).padStart(2, '0');
+    fechaStr = `${anio}-${mes}-${dia}`;
+  }
+  const d2 = new Date(fechaStr + 'T00:00:00');
+  if (isNaN(d2.getTime())) return '—';
+  return d2.toLocaleDateString('es-AR');
 };
 const AZUL = '#1a2744';
 
