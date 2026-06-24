@@ -278,9 +278,11 @@ export default function Horas() {
     setModoFecha('rango');
   };
 
-  const exportar = (formato) => {
+const exportar = (formato) => {
     const params = new URLSearchParams();
     Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) params.set(k, v); });
+    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    if (token) params.set('token', token);
     window.open(`${BASE}/horas/exportar/${formato}?${params}`, '_blank');
   };
 
