@@ -5,6 +5,8 @@ import {
   Select, Input, AlertaError, Boton, Modal, Campo,
 } from '../../components/ui';
 
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+
 const fmt  = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
 const fmtF = (f) => {
   if (!f) return '—';
@@ -43,7 +45,11 @@ function TarjetasHoras({ resumen }) {
 }
 
 function TablaResumen({ resumen }) {
-  if (!resumen.length) return null;
+  if (!resumen.length) return (
+    <p style={{ color: '#999', fontSize: '14px', textAlign: 'center', padding: '32px' }}>
+      No hay registros para los filtros seleccionados.
+    </p>
+  );
   const porDibujante = {};
   resumen.forEach(r => {
     if (!porDibujante[r.dibujante_id]) {
@@ -56,7 +62,6 @@ function TablaResumen({ resumen }) {
 
   return (
     <div style={{ marginBottom: '28px' }}>
-      <p style={{ fontWeight: 500, fontSize: '15px', marginBottom: '12px' }}>Resumen por dibujante</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {Object.values(porDibujante).map(d => (
           <div key={d.nombre} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px', overflow: 'hidden' }}>
@@ -89,7 +94,6 @@ function TablaResumen({ resumen }) {
   );
 }
 
-// ── Panel de liquidación mensual ──────────────────────────────────────────────
 function PanelLiquidacion({ pendientes, socios, destinatarios, onLiquidar, cargando }) {
   const [seleccion, setSeleccion] = useState(null);
   const [pagado_por_estudio, setPagadoPorEstudio] = useState(true);
@@ -216,15 +220,34 @@ export default function Horas() {
   const [cargando,   setCargando]   = useState(true);
   const [cargandoPendientes, setCargandoPendientes] = useState(true);
   const [error,      setError]      = useState(null);
-  const [filtros,    setFiltros]    = useState({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' });
-  const [vista,      setVista]      = useState('detalle');
+
+  // Filtros: dibujante, proyecto, y modo de fecha (rango exacto o mes)
+  const [modoFecha, setModoFecha] = useState('rango'); // 'rango' | 'mes'
+  const hoy = new Date();
+  const [mesSeleccionado, setMesSeleccionado] = useState(
+    `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
+  );
+  const [filtros, setFiltros] = useState({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' });
+  const [vista, setVista] = useState('resumen'); // Vista por defecto: "Por dibujante"
+
+  // Calcular desde/hasta efectivos según el modo de fecha
+  const filtrosEfectivos = (() => {
+    if (modoFecha === 'mes' && mesSeleccionado) {
+      const [anio, mes] = mesSeleccionado.split('-').map(Number);
+      const desde = `${anio}-${String(mes).padStart(2, '0')}-01`;
+      const ultimoDia = new Date(anio, mes, 0).getDate();
+      const hasta = `${anio}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+      return { ...filtros, desde, hasta };
+    }
+    return filtros;
+  })();
 
   const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
     try {
       const params = new URLSearchParams();
-      Object.entries(filtros).forEach(([k, v]) => { if (v) params.set(k, v); });
+      Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) params.set(k, v); });
       const [h, r, d, p, s, dest, pend] = await Promise.all([
         get(`/horas?${params}`),
         get(`/horas/resumen?${params}`),
@@ -239,7 +262,7 @@ export default function Horas() {
     } catch (err) { setError(err.message); }
     finally { setCargando(false); setCargandoPendientes(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(filtros)]);
+  }, [JSON.stringify(filtrosEfectivos)]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -250,9 +273,31 @@ export default function Horas() {
 
   const setF = (k) => (e) => setFiltros(p => ({ ...p, [k]: e.target.value }));
 
+  const limpiarFiltros = () => {
+    setFiltros({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' });
+    setModoFecha('rango');
+  };
+
+  const exportar = (formato) => {
+    const params = new URLSearchParams();
+    Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) params.set(k, v); });
+    window.open(`${BASE}/horas/exportar/${formato}?${params}`, '_blank');
+  };
+
+  const hayFiltrosActivos = filtros.dibujante_id || filtros.proyecto_id || filtros.desde || filtros.hasta || modoFecha === 'mes';
+
   return (
     <div style={{ padding: '32px', maxWidth: '1200px' }}>
-      <EncabezadoSeccion titulo="Horas trabajadas" subtitulo="Vista completa con costos por dibujante y proyecto" />
+      <EncabezadoSeccion
+        titulo="Horas trabajadas"
+        subtitulo="Vista completa con costos por dibujante y proyecto"
+        accion={
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Boton variante="secundario" onClick={() => exportar('excel')}>⬇ Excel</Boton>
+            <Boton variante="secundario" onClick={() => exportar('pdf')}>⬇ PDF</Boton>
+          </div>
+        }
+      />
       <TarjetasHoras resumen={resumen} />
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -264,13 +309,37 @@ export default function Horas() {
           <option value="">Todos los proyectos</option>
           {proyectos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </Select>
-        <Input type="date" value={filtros.desde} onChange={setF('desde')} style={{ width: 'auto' }} title="Desde" />
-        <Input type="date" value={filtros.hasta} onChange={setF('hasta')} style={{ width: 'auto' }} title="Hasta" />
-        {Object.values(filtros).some(Boolean) && (
-          <Boton variante="texto" onClick={() => setFiltros({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' })}>Limpiar</Boton>
+
+        {/* Toggle entre filtro por rango o por mes */}
+        <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
+          {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
+            <button key={opt.id} onClick={() => setModoFecha(opt.id)} style={{
+              padding: '5px 10px', fontSize: '12px', borderRadius: '6px', border: 'none',
+              background: modoFecha === opt.id ? '#fff' : 'transparent',
+              boxShadow: modoFecha === opt.id ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+              cursor: 'pointer', fontFamily: 'inherit', color: modoFecha === opt.id ? AZUL : '#666',
+              fontWeight: modoFecha === opt.id ? 600 : 400,
+            }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {modoFecha === 'rango' ? (
+          <>
+            <Input type="date" value={filtros.desde} onChange={setF('desde')} style={{ width: 'auto' }} title="Desde" />
+            <Input type="date" value={filtros.hasta} onChange={setF('hasta')} style={{ width: 'auto' }} title="Hasta" />
+          </>
+        ) : (
+          <Input type="month" value={mesSeleccionado} onChange={e => setMesSeleccionado(e.target.value)} style={{ width: 'auto' }} />
         )}
+
+        {hayFiltrosActivos && (
+          <Boton variante="texto" onClick={limpiarFiltros}>Limpiar</Boton>
+        )}
+
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
-          {['detalle', 'resumen', 'liquidar'].map(v => (
+          {['resumen', 'detalle', 'liquidar'].map(v => (
             <button key={v} onClick={() => setVista(v)} style={{
               padding: '6px 14px', fontSize: '13px', borderRadius: '20px', border: '1px solid',
               borderColor: vista === v ? AZUL : '#d0d0d0',
