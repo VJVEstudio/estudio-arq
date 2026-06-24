@@ -2,13 +2,16 @@ const jwt = require('jsonwebtoken');
 
 function verificar(req, res, next) {
   const authHeader = req.headers['authorization'];
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let token = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token) {
+    // Permite autenticar vía query string para descargas directas (window.open)
+    token = req.query.token;
+  }
+  if (!token) {
     return res.status(401).json({ error: 'Token requerido' });
   }
-
-  const token = authHeader.split(' ')[1];
-
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     req.usuario = payload;
