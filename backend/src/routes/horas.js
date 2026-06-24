@@ -295,68 +295,88 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   if (hasta)         { params.push(hasta);         condiciones.push(`h.fecha <= $${params.length}`); }
 
   const { rows } = await query(
-    `SELECT h.fecha, d.nombre AS dibujante, p.nombre AS proyecto,
-            h.horas, h.tarifa_aplicada, h.costo_total, h.liquidada
+    `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
+            p.id AS proyecto_id, p.nombre AS proyecto_nombre,
+            SUM(h.horas) AS horas_totales, SUM(h.costo_total) AS costo_total
      FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
      WHERE ${condiciones.join(' AND ')}
-     ORDER BY d.nombre, h.fecha`,
+     GROUP BY d.id, d.nombre, d.tarifa_hora_base, p.id, p.nombre
+     ORDER BY d.nombre, p.nombre`,
     params
   );
 
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', 'attachment; filename="horas_dibujantes.pdf"');
+  const porDibujante = {};
+  rows.forEach(r => {
+    if (!porDibujante[r.dibujante_id]) {
+      porDibujante[r.dibujante_id] = {
+        nombre: r.dibujante_nombre, tarifa: r.tarifa_actual,
+        proyectos: [], horasTotal: 0, costoTotal: 0,
+      };
+    }
+    porDibujante[r.dibujante_id].proyectos.push(r);
+    porDibujante[r.dibujante_id].horasTotal += Number(r.horas_totales);
+    porDibujante[r.dibujante_id].costoTotal += Number(r.costo_total);
+  });
 
-  const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+  const grupos = Object.values(porDibujante);
+  const horasTotalesGlobal = grupos.reduce((s, g) => s + g.horasTotal, 0);
+  const costoTotalGlobal   = grupos.reduce((s, g) => s + g.costoTotal, 0);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="horas_por_dibujante.pdf"');
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
   doc.pipe(res);
 
-  doc.fontSize(16).fillColor('#1a2744').text('Reporte de Horas — VJV Arquitectos', { align: 'center' });
-  doc.fontSize(10).fillColor('#666').text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, { align: 'center' });
+  const moneyFmt = (n) => `$ ${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+
+  doc.fontSize(16).fillColor('#1a2744').text('Horas trabajadas — VJV Arquitectos', { align: 'center' });
+  doc.fontSize(9).fillColor('#666').text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, { align: 'center' });
+  doc.moveDown(0.6);
+
+  // Resumen general
+  doc.fontSize(10).fillColor('#1a2744');
+  doc.text(`Horas totales: ${horasTotalesGlobal.toFixed(1)} h     Costo total: ${moneyFmt(costoTotalGlobal)}     Dibujantes: ${grupos.length}`, { align: 'center' });
   doc.moveDown(1);
 
-  const colWidths = [70, 130, 180, 50, 80, 80, 80];
-  const headers = ['Fecha', 'Dibujante', 'Proyecto', 'Horas', 'Tarifa', 'Costo', 'Estado'];
-  let y = doc.y;
-  let x = 40;
+  const anchoPagina = doc.page.width - 80;
 
-  doc.fontSize(9).fillColor('#fff');
-  doc.rect(40, y, colWidths.reduce((a, b) => a + b, 0), 18).fill('#1a2744');
-  doc.fillColor('#fff');
-  headers.forEach((h, i) => {
-    doc.text(h, x + 4, y + 5, { width: colWidths[i] - 8 });
-    x += colWidths[i];
-  });
+  grupos.forEach(g => {
+    if (doc.y > 680) doc.addPage();
 
-  y += 18;
-  doc.fillColor('#1a1a1a').fontSize(8);
+    // Encabezado del dibujante (franja gris)
+    const yInicio = doc.y;
+    doc.rect(40, yInicio, anchoPagina, 24).fill('#f8f9fa');
+    doc.fillColor('#1a1a1a').fontSize(11).font('Helvetica-Bold');
+    doc.text(g.nombre, 48, yInicio + 6, { width: 220, continued: false });
+    doc.font('Helvetica').fontSize(9).fillColor('#666');
+    doc.text(`Tarifa actual: ${moneyFmt(g.tarifa)}/h`, 270, yInicio + 8);
+    doc.fontSize(10).fillColor('#1a1a1a');
+    doc.text(`${g.horasTotal.toFixed(1)} h totales`, 420, yInicio + 7, { width: 90, align: 'right' });
+    doc.fillColor('#b71c1c').font('Helvetica-Bold');
+    doc.text(moneyFmt(g.costoTotal), 480, yInicio + 7, { width: 95, align: 'right' });
+    doc.font('Helvetica');
 
-  let totalHoras = 0, totalCosto = 0;
-  rows.forEach((r, idx) => {
-    if (y > 520) { doc.addPage(); y = 40; }
-    x = 40;
-    const fecha = new Date(r.fecha).toLocaleDateString('es-AR');
-    const valores = [
-      fecha, r.dibujante, r.proyecto,
-      Number(r.horas).toFixed(1), `$${Number(r.tarifa_aplicada).toFixed(2)}`,
-      `$${Number(r.costo_total).toFixed(2)}`, r.liquidada ? 'Liquidada' : 'Pendiente',
-    ];
-    if (idx % 2 === 0) doc.rect(40, y, colWidths.reduce((a, b) => a + b, 0), 16).fill('#f8f9fa');
-    doc.fillColor('#1a1a1a');
-    valores.forEach((v, i) => {
-      doc.text(String(v), x + 4, y + 3, { width: colWidths[i] - 8 });
-      x += colWidths[i];
+    let y = yInicio + 24;
+
+    // Filas de proyectos
+    g.proyectos.forEach((p, idx) => {
+      if (y > 750) { doc.addPage(); y = 40; }
+      if (idx % 2 === 0) doc.rect(40, y, anchoPagina, 16).fill('#ffffff');
+      doc.fillColor('#666').fontSize(9);
+      doc.text(p.proyecto_nombre, 48, y + 3, { width: 220 });
+      doc.text(`${Number(p.horas_totales).toFixed(1)} h`, 270, y + 3, { width: 60 });
+      doc.fillColor('#999').font('Helvetica-Oblique');
+      doc.text(`× ${moneyFmt(p.tarifa_actual)}/h`, 340, y + 3, { width: 110 });
+      doc.font('Helvetica').fillColor('#1a1a1a');
+      doc.text(moneyFmt(p.costo_total), 480, y + 3, { width: 95, align: 'right' });
+      y += 16;
     });
-    y += 16;
-    totalHoras += Number(r.horas);
-    totalCosto += Number(r.costo_total);
-  });
 
-  y += 10;
-  doc.fontSize(10).fillColor('#1a2744').text(
-    `Total: ${totalHoras.toFixed(1)} horas — $${totalCosto.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`,
-    40, y
-  );
+    doc.y = y + 10;
+  });
 
   doc.end();
 });
