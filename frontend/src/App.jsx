@@ -7,8 +7,7 @@ import LayoutDibujante  from './components/LayoutDibujante';
 import Login from './pages/Login';
 
 import Dashboard       from './pages/admin/Dashboard';
-import Clientes        from './pages/admin/Clientes';
-import Proyectos       from './pages/admin/Proyectos';
+import ClientesProyectos from './pages/admin/ClientesProyectos';
 import Ingresos        from './pages/admin/Ingresos';
 import Egresos         from './pages/admin/Egresos';
 import Balance         from './pages/admin/Balance';
