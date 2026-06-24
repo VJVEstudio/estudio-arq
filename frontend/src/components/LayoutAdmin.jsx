@@ -9,8 +9,7 @@ const NAV = [
     { to: '/admin', label: 'Dashboard', icono: '◈', exact: true },
   ]},
   { grupo: 'Gestión', items: [
-    { to: '/admin/clientes',  label: 'Clientes',  icono: '👤' },
-    { to: '/admin/proyectos', label: 'Proyectos', icono: '📐' },
+    { to: '/admin/clientes-proyectos', label: 'Clientes y Proyectos', icono: '📐' },
   ]},
   { grupo: 'Finanzas', items: [
     { to: '/admin/ingresos', label: 'Ingresos', icono: '↑' },
