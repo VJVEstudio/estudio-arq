@@ -28,8 +28,7 @@ export default function App() {
           <Route element={<ProtectedRoute rol="admin" />}>
             <Route element={<LayoutAdmin />}>
               <Route path="/admin"                       element={<Dashboard />} />
-              <Route path="/admin/clientes"              element={<Clientes />} />
-              <Route path="/admin/proyectos"             element={<Proyectos />} />
+              <Route path="/admin/clientes-proyectos"      element={<ClientesProyectos />} />
               <Route path="/admin/ingresos"              element={<Ingresos />} />
               <Route path="/admin/egresos"               element={<Egresos />} />
               <Route path="/admin/balance"               element={<Balance />} />
