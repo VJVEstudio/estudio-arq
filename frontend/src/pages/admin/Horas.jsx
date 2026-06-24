@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { get, post } from '../../lib/api';
-import {
+import { get, post, getAccessToken } from '../../lib/api';import {
   EncabezadoSeccion, Tabla, Fila, Celda,
   Select, Input, AlertaError, Boton, Modal, Campo,
 } from '../../components/ui';
