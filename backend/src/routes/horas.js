@@ -217,4 +217,148 @@ router.delete('/:id', async (req, res) => {
   res.status(204).send();
 });
 
+// ── GET /api/horas/exportar/excel ─────────────────────────────────────────────
+router.get('/exportar/excel', auth.soloAdmin, async (req, res) => {
+  const { proyecto_id, dibujante_id, desde, hasta } = req.query;
+  const condiciones = ['TRUE'];
+  const params = [];
+  if (dibujante_id) { params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
+  if (proyecto_id)  { params.push(proyecto_id);  condiciones.push(`h.proyecto_id = $${params.length}`); }
+  if (desde)        { params.push(desde);         condiciones.push(`h.fecha >= $${params.length}`); }
+  if (hasta)         { params.push(hasta);         condiciones.push(`h.fecha <= $${params.length}`); }
+
+  const { rows } = await query(
+    `SELECT h.fecha, d.nombre AS dibujante, p.nombre AS proyecto,
+            h.horas, h.tarifa_aplicada, h.costo_total, h.liquidada, h.descripcion_tarea
+     FROM horas_dibujantes h
+     JOIN dibujantes d ON d.id = h.dibujante_id
+     JOIN proyectos  p ON p.id = h.proyecto_id
+     WHERE ${condiciones.join(' AND ')}
+     ORDER BY d.nombre, h.fecha`,
+    params
+  );
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Horas');
+  ws.columns = [
+    { header: 'Fecha', key: 'fecha', width: 14 },
+    { header: 'Dibujante', key: 'dibujante', width: 22 },
+    { header: 'Proyecto', key: 'proyecto', width: 28 },
+    { header: 'Horas', key: 'horas', width: 10 },
+    { header: 'Tarifa aplicada', key: 'tarifa_aplicada', width: 16 },
+    { header: 'Costo total', key: 'costo_total', width: 16 },
+    { header: 'Estado', key: 'estado', width: 14 },
+    { header: 'Descripción', key: 'descripcion', width: 40 },
+  ];
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A2744' } };
+  ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+
+  rows.forEach(r => {
+    ws.addRow({
+      fecha: new Date(r.fecha).toLocaleDateString('es-AR'),
+      dibujante: r.dibujante,
+      proyecto: r.proyecto,
+      horas: Number(r.horas),
+      tarifa_aplicada: Number(r.tarifa_aplicada),
+      costo_total: Number(r.costo_total),
+      estado: r.liquidada ? 'Liquidada' : 'Pendiente',
+      descripcion: r.descripcion_tarea || '',
+    });
+  });
+
+  ws.getColumn('tarifa_aplicada').numFmt = '$ #,##0.00';
+  ws.getColumn('costo_total').numFmt = '$ #,##0.00';
+
+  // Fila de totales
+  const filaTotal = ws.addRow({
+    dibujante: 'TOTAL',
+    horas: rows.reduce((s, r) => s + Number(r.horas), 0),
+    costo_total: rows.reduce((s, r) => s + Number(r.costo_total), 0),
+  });
+  filaTotal.font = { bold: true };
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="horas_dibujantes.xlsx"');
+  await wb.xlsx.write(res);
+  res.end();
+});
+
+// ── GET /api/horas/exportar/pdf ───────────────────────────────────────────────
+router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
+  const { proyecto_id, dibujante_id, desde, hasta } = req.query;
+  const condiciones = ['TRUE'];
+  const params = [];
+  if (dibujante_id) { params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
+  if (proyecto_id)  { params.push(proyecto_id);  condiciones.push(`h.proyecto_id = $${params.length}`); }
+  if (desde)        { params.push(desde);         condiciones.push(`h.fecha >= $${params.length}`); }
+  if (hasta)         { params.push(hasta);         condiciones.push(`h.fecha <= $${params.length}`); }
+
+  const { rows } = await query(
+    `SELECT h.fecha, d.nombre AS dibujante, p.nombre AS proyecto,
+            h.horas, h.tarifa_aplicada, h.costo_total, h.liquidada
+     FROM horas_dibujantes h
+     JOIN dibujantes d ON d.id = h.dibujante_id
+     JOIN proyectos  p ON p.id = h.proyecto_id
+     WHERE ${condiciones.join(' AND ')}
+     ORDER BY d.nombre, h.fecha`,
+    params
+  );
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="horas_dibujantes.pdf"');
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+  doc.pipe(res);
+
+  doc.fontSize(16).fillColor('#1a2744').text('Reporte de Horas — VJV Arquitectos', { align: 'center' });
+  doc.fontSize(10).fillColor('#666').text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, { align: 'center' });
+  doc.moveDown(1);
+
+  const colWidths = [70, 130, 180, 50, 80, 80, 80];
+  const headers = ['Fecha', 'Dibujante', 'Proyecto', 'Horas', 'Tarifa', 'Costo', 'Estado'];
+  let y = doc.y;
+  let x = 40;
+
+  doc.fontSize(9).fillColor('#fff');
+  doc.rect(40, y, colWidths.reduce((a, b) => a + b, 0), 18).fill('#1a2744');
+  doc.fillColor('#fff');
+  headers.forEach((h, i) => {
+    doc.text(h, x + 4, y + 5, { width: colWidths[i] - 8 });
+    x += colWidths[i];
+  });
+
+  y += 18;
+  doc.fillColor('#1a1a1a').fontSize(8);
+
+  let totalHoras = 0, totalCosto = 0;
+  rows.forEach((r, idx) => {
+    if (y > 520) { doc.addPage(); y = 40; }
+    x = 40;
+    const fecha = new Date(r.fecha).toLocaleDateString('es-AR');
+    const valores = [
+      fecha, r.dibujante, r.proyecto,
+      Number(r.horas).toFixed(1), `$${Number(r.tarifa_aplicada).toFixed(2)}`,
+      `$${Number(r.costo_total).toFixed(2)}`, r.liquidada ? 'Liquidada' : 'Pendiente',
+    ];
+    if (idx % 2 === 0) doc.rect(40, y, colWidths.reduce((a, b) => a + b, 0), 16).fill('#f8f9fa');
+    doc.fillColor('#1a1a1a');
+    valores.forEach((v, i) => {
+      doc.text(String(v), x + 4, y + 3, { width: colWidths[i] - 8 });
+      x += colWidths[i];
+    });
+    y += 16;
+    totalHoras += Number(r.horas);
+    totalCosto += Number(r.costo_total);
+  });
+
+  y += 10;
+  doc.fontSize(10).fillColor('#1a2744').text(
+    `Total: ${totalHoras.toFixed(1)} horas — $${totalCosto.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`,
+    40, y
+  );
+
+  doc.end();
+});
+
 module.exports = router;
