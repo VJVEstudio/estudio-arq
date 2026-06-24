@@ -37,12 +37,13 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/resumen', auth.soloAdmin, async (req, res) => {
-  const { proyecto_id, desde, hasta } = req.query;
+  const { proyecto_id, dibujante_id, desde, hasta } = req.query;
   const condiciones = ['TRUE'];
   const params = [];
-  if (proyecto_id) { params.push(proyecto_id); condiciones.push(`h.proyecto_id = $${params.length}`); }
-  if (desde)       { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
-  if (hasta)       { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
+  if (dibujante_id) { params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
+  if (proyecto_id)  { params.push(proyecto_id);  condiciones.push(`h.proyecto_id = $${params.length}`); }
+  if (desde)        { params.push(desde);         condiciones.push(`h.fecha >= $${params.length}`); }
+  if (hasta)        { params.push(hasta);         condiciones.push(`h.fecha <= $${params.length}`); }
   const { rows } = await query(
     `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre,
             d.tarifa_hora_base AS tarifa_actual,
@@ -107,14 +108,12 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
     const horas_totales = horas.reduce((s, h) => s + Number(h.horas), 0);
     const monto_total   = horas.reduce((s, h) => s + Number(h.costo_total), 0);
 
-    // Agrupar por proyecto: cuánto costo le corresponde a cada uno
     const porProyecto = {};
     horas.forEach(h => {
       if (!porProyecto[h.proyecto_id]) porProyecto[h.proyecto_id] = 0;
       porProyecto[h.proyecto_id] += Number(h.costo_total);
     });
 
-    // Crear un egreso por cada proyecto, proporcional a su costo
     const egresosCreados = [];
     for (const [proyecto_id_actual, monto_proyecto] of Object.entries(porProyecto)) {
       const { rows: [egreso] } = await client.query(`
