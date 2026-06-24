@@ -5,6 +5,7 @@ let renovando   = null;
 
 export function setAccessToken(token) { accessToken = token; }
 export function clearAccessToken() { accessToken = null; }
+export function getAccessToken() { return accessToken; }
 
 async function renovarToken() {
   if (renovando) return renovando;
