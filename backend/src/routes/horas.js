@@ -1,6 +1,8 @@
 const express = require('express');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
+const ExcelJS = require('exceljs');
+const PDFDocument = require('pdfkit');
 
 const router = express.Router();
 router.use(auth.verificar);
