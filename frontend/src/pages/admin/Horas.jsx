@@ -280,11 +280,10 @@ export default function Horas() {
 const exportar = (formato) => {
     const params = new URLSearchParams();
     Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) params.set(k, v); });
-    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    const token = getAccessToken();
     if (token) params.set('token', token);
     window.open(`${BASE}/horas/exportar/${formato}?${params}`, '_blank');
   };
-
   const hayFiltrosActivos = filtros.dibujante_id || filtros.proyecto_id || filtros.desde || filtros.hasta || modoFecha === 'mes';
 
   return (
