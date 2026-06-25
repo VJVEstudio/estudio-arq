@@ -64,14 +64,16 @@ function NuevoDestinatario({ onCrear, onCancelar }) {
   const [form, setForm] = useState({ nombre: '', tipo: 'otro', cuit: '', cbu: '', notas: '' });
   const [guardando, setGuardando] = useState(false);
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
-  const handleSubmit = async (e) => {
+  const handleCrear = async (e) => {
+    // No es un <form>, así que frenamos cualquier burbujeo hacia el formulario padre
     e.preventDefault();
+    e.stopPropagation();
     if (!form.nombre.trim()) return;
     setGuardando(true);
     try { await onCrear(form); } finally { setGuardando(false); }
   };
   return (
-    <form onSubmit={handleSubmit} style={{ border: '1px solid #d0d0d0', borderRadius: '10px', padding: '16px', marginTop: '8px', background: '#fafafa' }}>
+    <div style={{ border: '1px solid #d0d0d0', borderRadius: '10px', padding: '16px', marginTop: '8px', background: '#fafafa' }}>
       <p style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 500 }}>Nuevo destinatario</p>
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginBottom: '10px' }}>
         <Campo label="Nombre *"><Input value={form.nombre} onChange={set('nombre')} placeholder="Ej: AFIP" autoFocus /></Campo>
@@ -87,10 +89,11 @@ function NuevoDestinatario({ onCrear, onCancelar }) {
       </div>
       <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
         <Boton type="button" variante="secundario" onClick={onCancelar}>Cancelar</Boton>
-        <Boton type="submit" disabled={guardando || !form.nombre.trim()}>{guardando ? 'Guardando…' : 'Crear y seleccionar'}</Boton>
+        <Boton type="button" onClick={handleCrear} disabled={guardando || !form.nombre.trim()}>{guardando ? 'Guardando…' : 'Crear y seleccionar'}</Boton>
       </div>
-    </form>
+    </div>
   );
+}
 }
 
 function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onNuevoDestinatario, onGuardar, onCancelar, guardando, errorServidor }) {
