@@ -38,8 +38,7 @@ function TarjetasResumen({ resumen }) {
   );
 }
 
-function FormIngreso({ inicial = {}, clientes, proyectos, socios, onGuardar, onCancelar, guardando, errorServidor }) {
-  const [form, setForm] = useState({
+export function FormIngreso({ inicial = {}, clientes, proyectos, socios, onGuardar, onCancelar, guardando, errorServidor }) {  const [form, setForm] = useState({
     cliente_id:    inicial.cliente_id    || '',
     proyecto_id:   inicial.proyecto_id   || '',
     monto:         inicial.monto         || '',
