@@ -264,3 +264,5 @@ router.get('/:id/pdf', async (req, res) => {
 
   doc.end();
 });
+
+module.exports = router;
