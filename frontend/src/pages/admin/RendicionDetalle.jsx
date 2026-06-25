@@ -57,8 +57,11 @@ const [form, setForm] = useState({
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <Campo label="Descripción *" error={errores.descripcion}>
+<Campo label="Descripción *" error={errores.descripcion}>
         <Input value={form.descripcion} onChange={set('descripcion')} placeholder="Ej: Cerramientos y Estructuras - Certificado Obra" autoFocus />
+      </Campo>
+      <Campo label="Proveedor">
+        <Input value={form.proveedor} onChange={set('proveedor')} placeholder="Ej: Cerramientos y Estructuras SA" />
       </Campo>
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
         <Campo label="N° de comprobante">
