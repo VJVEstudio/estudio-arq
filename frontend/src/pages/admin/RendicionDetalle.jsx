@@ -23,9 +23,10 @@ const fmtF = (f) => {
 };
 
 function FormComprobante({ inicial = {}, onGuardar, onCancelar, guardando }) {
-  const [form, setForm] = useState({
+const [form, setForm] = useState({
     descripcion: inicial.descripcion || '',
     numero_comprobante: inicial.numero_comprobante || '',
+    proveedor: inicial.proveedor || '',
     moneda: inicial.moneda || 'ARS',
     monto_neto: inicial.monto_neto ?? '',
     iva: inicial.iva ?? '',
