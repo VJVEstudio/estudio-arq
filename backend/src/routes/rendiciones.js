@@ -155,7 +155,7 @@ router.post('/:id/comprobantes', async (req, res) => {
 
 // PUT /api/rendiciones/comprobantes/:comprobanteId
 router.put('/comprobantes/:comprobanteId', async (req, res) => {
-  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb } = req.body;
+  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor } = req.body;
   if (!descripcion?.trim()) return res.status(400).json({ error: 'La descripción es obligatoria' });
   const neto = Number(monto_neto || 0);
   const ivaNum = Number(iva || 0);
@@ -164,9 +164,9 @@ router.put('/comprobantes/:comprobanteId', async (req, res) => {
 
   const { rows } = await query(
     `UPDATE rendicion_comprobantes
-     SET descripcion=$1, numero_comprobante=$2, moneda=$3, monto_neto=$4, iva=$5, iibb=$6, monto_total=$7
-     WHERE id=$8 RETURNING *`,
-    [descripcion.trim(), numero_comprobante || null, moneda || 'ARS', neto, ivaNum, iibbNum, total, req.params.comprobanteId]
+     SET descripcion=$1, numero_comprobante=$2, moneda=$3, monto_neto=$4, iva=$5, iibb=$6, monto_total=$7, proveedor=$8
+     WHERE id=$9 RETURNING *`,
+    [descripcion.trim(), numero_comprobante || null, moneda || 'ARS', neto, ivaNum, iibbNum, total, proveedor?.trim() || null, req.params.comprobanteId]
   );
   if (!rows[0]) return res.status(404).json({ error: 'Comprobante no encontrado' });
   res.json(rows[0]);
