@@ -121,7 +121,7 @@ router.delete('/:id', async (req, res) => {
 
 // POST /api/rendiciones/:id/comprobantes
 router.post('/:id/comprobantes', async (req, res) => {
-  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb } = req.body;
+  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor } = req.body;
   if (!descripcion?.trim()) return res.status(400).json({ error: 'La descripción es obligatoria' });
   const neto = Number(monto_neto || 0);
   const ivaNum = Number(iva || 0);
@@ -132,6 +132,16 @@ router.post('/:id/comprobantes', async (req, res) => {
     `SELECT COALESCE(MAX(orden), 0) + 1 AS siguiente FROM rendicion_comprobantes WHERE rendicion_id = $1`,
     [req.params.id]
   );
+
+  const { rows } = await query(
+    `INSERT INTO rendicion_comprobantes
+       (rendicion_id, orden, descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, monto_total, proveedor)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+    [req.params.id, ordenRows[0].siguiente, descripcion.trim(), numero_comprobante || null,
+     moneda || 'ARS', neto, ivaNum, iibbNum, total, proveedor?.trim() || null]
+  );
+  res.status(201).json(rows[0]);
+});
 
   const { rows } = await query(
     `INSERT INTO rendicion_comprobantes
