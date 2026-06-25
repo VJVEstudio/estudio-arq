@@ -216,13 +216,14 @@ router.get('/:id/pdf', async (req, res) => {
   const margenIzq = 35;
   const anchoTotal = doc.page.width - 70;
   // Columnas: Concepto | Fecha | Comprobante | Neto | IVA | IIBB y otros
-  const cols = [
-    { x: margenIzq, w: 165, label: 'Concepto' },
-    { x: margenIzq + 165, w: 55, label: 'Fecha' },
-    { x: margenIzq + 220, w: 85, label: 'Comprobante' },
-    { x: margenIzq + 305, w: 75, label: 'Neto' },
-    { x: margenIzq + 380, w: 60, label: 'IVA' },
-    { x: margenIzq + 440, w: anchoTotal - 440, label: 'IIBB y otros' },
+const cols = [
+    { x: margenIzq, w: 130, label: 'Concepto' },
+    { x: margenIzq + 130, w: 48, label: 'Fecha' },
+    { x: margenIzq + 178, w: 75, label: 'Comprobante' },
+    { x: margenIzq + 253, w: 65, label: 'Neto' },
+    { x: margenIzq + 318, w: 50, label: 'IVA' },
+    { x: margenIzq + 368, w: 65, label: 'IIBB y otros' },
+    { x: margenIzq + 433, w: anchoTotal - 433, label: 'Subtotal' },
   ];
 
   // ── Encabezado ──
@@ -302,12 +303,15 @@ router.get('/:id/pdf', async (req, res) => {
       doc.text(fmtFecha(c.fecha), cols[1].x + 2, y + 6, { width: cols[1].w - 4, align: 'right' });
       doc.text(c.numero_comprobante || '', cols[2].x + 2, y + 6, { width: cols[2].w - 4, align: 'right' });
 
-      doc.fillColor(esNegativo ? '#c00000' : '#000');
+doc.fillColor(esNegativo ? '#c00000' : '#000');
       doc.text(fmtMonto(c.monto_neto, moneda), cols[3].x, y + 6, { width: cols[3].w - 6, align: 'right' });
 
       doc.fillColor('#000');
       doc.text(Number(c.iva) !== 0 ? fmtMonto(c.iva, moneda) : '', cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
       doc.text(Number(c.iibb) !== 0 ? fmtMonto(c.iibb, moneda) : '', cols[5].x, y + 6, { width: cols[5].w - 6, align: 'right' });
+
+      doc.fillColor(esNegativo ? '#c00000' : '#000').font('Helvetica-Bold');
+      doc.text(fmtMonto(c.monto_total, moneda), cols[6].x, y + 6, { width: cols[6].w - 6, align: 'right' });
 
       y += altoFila;
     });
@@ -318,10 +322,10 @@ router.get('/:id/pdf', async (req, res) => {
       doc.moveTo(c2.x, y).lineTo(c2.x, y + altoFila).strokeColor('#bbb').stroke();
     });
     doc.fillColor('#000').fontSize(9).font('Helvetica-Bold');
-    doc.text('Total', cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
-    doc.rect(cols[5].x, y, cols[5].w, altoFila).fillAndStroke('#d9d9d9', '#bbb');
+    doc.text('Total', cols[5].x, y + 6, { width: cols[5].w - 6, align: 'right' });
+    doc.rect(cols[6].x, y, cols[6].w, altoFila).fillAndStroke('#d9d9d9', '#bbb');
     doc.fillColor('#000');
-    doc.text(fmtMonto(total, moneda), cols[5].x, y + 6, { width: cols[5].w - 6, align: 'right' });
+    doc.text(fmtMonto(total, moneda), cols[6].x, y + 6, { width: cols[6].w - 6, align: 'right' });
 
     y += altoFila + 16;
   });
