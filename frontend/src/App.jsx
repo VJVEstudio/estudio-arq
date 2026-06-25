@@ -33,8 +33,9 @@ export default function App() {
               <Route path="/admin/clientes-proyectos"      element={<ClientesProyectos />} />
               <Route path="/admin/ingresos"                element={<Ingresos />} />
               <Route path="/admin/egresos"                 element={<Egresos />} />
-              <Route path="/admin/movimientos"             element={<MovimientosFinancieros />} />
-              <Route path="/admin/balance"               element={<Balance />} />
+<Route path="/admin/movimientos"             element={<MovimientosFinancieros />} />
+              <Route path="/admin/rendiciones"             element={<Rendiciones />} />
+              <Route path="/admin/rendiciones/:id"         element={<RendicionDetalle />} />              <Route path="/admin/balance"               element={<Balance />} />
               <Route path="/admin/dibujantes"            element={<Dibujantes />} />
               <Route path="/admin/horas"                 element={<Horas />} />
               <Route path="/admin/reportes"              element={<ReporteGeneral />} />
