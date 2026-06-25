@@ -9,17 +9,22 @@ export function getAccessToken() { return accessToken; }
 
 async function renovarToken() {
   if (renovando) return renovando;
-  renovando = fetch(`${BASE_URL}/auth/refresh`, {
-    method: 'POST', credentials: 'include',
-  })
-    .then(async (res) => {
-      if (!res.ok) throw new Error('No se pudo renovar el token');
-      const data = await res.json();
-      accessToken = data.accessToken;
-      return accessToken;
-    })
-    .finally(() => { renovando = null; });
-  return renovando;
+  renovando = (async () => {
+    // Pequeño margen para agrupar renovaciones que lleguen casi al mismo tiempo
+    await new Promise(r => setTimeout(r, 50));
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST', credentials: 'include',
+    });
+    if (!res.ok) throw new Error('No se pudo renovar el token');
+    const data = await res.json();
+    accessToken = data.accessToken;
+    return accessToken;
+  })();
+  try {
+    return await renovando;
+  } finally {
+    renovando = null;
+  }
 }
 
 export async function api(endpoint, opts = {}) {
