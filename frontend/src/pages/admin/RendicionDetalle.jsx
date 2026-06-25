@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRendicion } from '../../hooks/useRendiciones';
-import { getAccessToken } from '../../lib/api';import {
+import { getAccessToken } from '../../lib/api';
+import {
   Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, AlertaError,
 } from '../../components/ui';
@@ -122,6 +123,11 @@ export default function RendicionDetalle() {
     catch (err) { setErrorAccion(err.message); }
   };
 
+  const handleExportarPDF = () => {
+    const token = getAccessToken();
+    window.open(`${BASE}/rendiciones/${id}/pdf?token=${token}`, '_blank');
+  };
+
   // Agrupar comprobantes por moneda
   const porMoneda = { ARS: [], USD: [] };
   rendicion.comprobantes.forEach(c => { porMoneda[c.moneda]?.push(c); });
@@ -138,8 +144,8 @@ export default function RendicionDetalle() {
           </p>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#999' }}>{fmtF(rendicion.fecha)}</p>
         </div>
-<div style={{ display: 'flex', gap: '8px' }}>
-          <Boton variante="secundario" onClick={() => window.open(`${BASE}/rendiciones/${id}/pdf`, '_blank')}>⬇ Exportar PDF</Boton>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Boton variante="secundario" onClick={handleExportarPDF}>⬇ Exportar PDF</Boton>
           <Boton onClick={() => setModal('crear')}>+ Agregar comprobante</Boton>
         </div>
       </div>
@@ -209,10 +215,8 @@ export default function RendicionDetalle() {
             ¿Eliminar <strong>{modal.comprobante.descripcion}</strong>?
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-<Boton variante="secundario" onClick={() => {
-            const token = getAccessToken();
-            window.open(`${BASE}/rendiciones/${id}/pdf?token=${token}`, '_blank');
-          }}>⬇ Exportar PDF</Boton>            <Boton variante="peligro" onClick={handleEliminar}>Sí, eliminar</Boton>
+            <Boton variante="secundario" onClick={cerrarModal}>Cancelar</Boton>
+            <Boton variante="peligro" onClick={handleEliminar}>Sí, eliminar</Boton>
           </div>
         </Modal>
       )}
