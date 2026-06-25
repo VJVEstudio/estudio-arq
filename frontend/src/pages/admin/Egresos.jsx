@@ -94,7 +94,6 @@ function NuevoDestinatario({ onCrear, onCancelar }) {
     </div>
   );
 }
-}
 
 function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onNuevoDestinatario, onGuardar, onCancelar, guardando, errorServidor }) {
   const [form, setForm] = useState({
