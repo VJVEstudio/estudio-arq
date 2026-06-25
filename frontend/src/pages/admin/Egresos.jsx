@@ -95,8 +95,7 @@ function NuevoDestinatario({ onCrear, onCancelar }) {
   );
 }
 
-function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onNuevoDestinatario, onGuardar, onCancelar, guardando, errorServidor }) {
-  const [form, setForm] = useState({
+export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onNuevoDestinatario, onGuardar, onCancelar, guardando, errorServidor }) {  const [form, setForm] = useState({
     destinatario_id:    inicial.destinatario_id    || '',
     proyecto_id:        inicial.proyecto_id        || '',
     categoria:          inicial.categoria          || 'generales',
