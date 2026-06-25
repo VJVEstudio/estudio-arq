@@ -10,6 +10,7 @@ import Dashboard       from './pages/admin/Dashboard';
 import ClientesProyectos from './pages/admin/ClientesProyectos';
 import Ingresos        from './pages/admin/Ingresos';
 import Egresos         from './pages/admin/Egresos';
+import MovimientosFinancieros from './pages/admin/MovimientosFinancieros';
 import Balance         from './pages/admin/Balance';
 import Dibujantes      from './pages/admin/Dibujantes';
 import Horas           from './pages/admin/Horas';
@@ -29,8 +30,9 @@ export default function App() {
             <Route element={<LayoutAdmin />}>
               <Route path="/admin"                       element={<Dashboard />} />
               <Route path="/admin/clientes-proyectos"      element={<ClientesProyectos />} />
-              <Route path="/admin/ingresos"              element={<Ingresos />} />
-              <Route path="/admin/egresos"               element={<Egresos />} />
+              <Route path="/admin/ingresos"                element={<Ingresos />} />
+              <Route path="/admin/egresos"                 element={<Egresos />} />
+              <Route path="/admin/movimientos"             element={<MovimientosFinancieros />} />
               <Route path="/admin/balance"               element={<Balance />} />
               <Route path="/admin/dibujantes"            element={<Dibujantes />} />
               <Route path="/admin/horas"                 element={<Horas />} />
