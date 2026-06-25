@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRendicion } from '../../hooks/useRendiciones';
-import {
+import { getAccessToken } from '../../lib/api';import {
   Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, AlertaError,
 } from '../../components/ui';
@@ -209,8 +209,10 @@ export default function RendicionDetalle() {
             ¿Eliminar <strong>{modal.comprobante.descripcion}</strong>?
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-            <Boton variante="secundario" onClick={cerrarModal}>Cancelar</Boton>
-            <Boton variante="peligro" onClick={handleEliminar}>Sí, eliminar</Boton>
+<Boton variante="secundario" onClick={() => {
+            const token = getAccessToken();
+            window.open(`${BASE}/rendiciones/${id}/pdf?token=${token}`, '_blank');
+          }}>⬇ Exportar PDF</Boton>            <Boton variante="peligro" onClick={handleEliminar}>Sí, eliminar</Boton>
           </div>
         </Modal>
       )}
