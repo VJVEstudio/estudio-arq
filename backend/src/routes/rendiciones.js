@@ -198,8 +198,19 @@ router.get('/:id/pdf', async (req, res) => {
     const abs = Math.abs(num).toLocaleString('es-AR', { minimumFractionDigits: 2 });
     return moneda === 'USD' ? `${signo}USD ${abs}` : `${signo}$ ${abs}`;
   };
-  const fmtFecha = (f) => {
-    const d = new Date(String(f).slice(0, 10) + 'T00:00:00');
+const fmtFecha = (f) => {
+    if (!f) return '—';
+    let fechaStr;
+    if (f instanceof Date) {
+      const anio = f.getUTCFullYear();
+      const mes = String(f.getUTCMonth() + 1).padStart(2, '0');
+      const dia = String(f.getUTCDate()).padStart(2, '0');
+      fechaStr = `${anio}-${mes}-${dia}`;
+    } else {
+      fechaStr = String(f).slice(0, 10);
+    }
+    const d = new Date(fechaStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return '—';
     return d.toLocaleDateString('es-AR');
   };
 
