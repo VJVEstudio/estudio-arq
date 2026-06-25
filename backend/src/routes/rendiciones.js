@@ -1,6 +1,7 @@
 const express = require('express');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
+const PDFDocument = require('pdfkit');
 
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
@@ -168,4 +169,98 @@ router.delete('/comprobantes/:comprobanteId', async (req, res) => {
   res.status(204).send();
 });
 
-module.exports = router;
+// GET /api/rendiciones/:id/pdf
+router.get('/:id/pdf', async (req, res) => {
+  const { rows: [rendicion] } = await query(
+    `SELECT r.*, p.nombre AS proyecto_nombre, c.nombre_razon_social AS cliente_nombre
+     FROM rendiciones r
+     JOIN proyectos p ON p.id = r.proyecto_id
+     JOIN clientes  c ON c.id = p.cliente_id
+     WHERE r.id = $1`,
+    [req.params.id]
+  );
+  if (!rendicion) return res.status(404).json({ error: 'Rendición no encontrada' });
+
+  const { rows: comprobantes } = await query(
+    `SELECT * FROM rendicion_comprobantes WHERE rendicion_id = $1 ORDER BY orden ASC, created_at ASC`,
+    [req.params.id]
+  );
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${rendicion.tipo}${rendicion.numero}.pdf"`);
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  doc.pipe(res);
+
+  const fmtMonto = (n, moneda) => {
+    const num = Number(n);
+    const signo = num < 0 ? '-' : '';
+    const abs = Math.abs(num).toLocaleString('es-AR', { minimumFractionDigits: 2 });
+    return moneda === 'USD' ? `${signo}USD ${abs}` : `${signo}$ ${abs}`;
+  };
+  const fmtFecha = (f) => {
+    const d = new Date(String(f).slice(0, 10) + 'T00:00:00');
+    return d.toLocaleDateString('es-AR');
+  };
+
+  // Encabezado
+  doc.fontSize(14).font('Helvetica-Bold').fillColor('#1a1a1a')
+    .text(rendicion.cliente_nombre.toUpperCase());
+  doc.moveDown(0.3);
+  doc.fontSize(11).font('Helvetica').fillColor('#666')
+    .text(rendicion.proyecto_nombre.toUpperCase());
+  doc.moveDown(0.3);
+  doc.fontSize(12).font('Helvetica-Bold').fillColor('#1a2744')
+    .text(`${rendicion.tipo}${rendicion.numero}`, { align: 'right' });
+  doc.moveDown(0.2);
+  doc.fontSize(10).font('Helvetica').fillColor('#666')
+    .text(fmtFecha(rendicion.fecha));
+  doc.moveDown(1);
+
+  const anchoPagina = doc.page.width - 80;
+  const colWidths = { desc: 230, comp: 110, neto: 90, imp: 70, total: 95 };
+
+  const porMoneda = { ARS: [], USD: [] };
+  comprobantes.forEach(c => { porMoneda[c.moneda]?.push(c); });
+
+  ['ARS', 'USD'].forEach(moneda => {
+    const lista = porMoneda[moneda];
+    if (!lista.length) return;
+
+    if (doc.y > 650) doc.addPage();
+
+    if (moneda === 'USD') {
+      doc.moveDown(0.5);
+      doc.fontSize(11).font('Helvetica-Bold').fillColor('#1a1a1a').text('USD');
+      doc.moveDown(0.3);
+    }
+
+    lista.forEach(c => {
+      if (doc.y > 720) doc.addPage();
+      const yFila = doc.y;
+      const impuestos = Number(c.iva) + Number(c.iibb);
+
+      doc.fontSize(9).font('Helvetica').fillColor('#1a1a1a');
+      doc.text(c.descripcion, 40, yFila, { width: colWidths.desc });
+      const alturaDesc = doc.heightOfString(c.descripcion, { width: colWidths.desc });
+
+      doc.text(c.numero_comprobante || '—', 40 + colWidths.desc, yFila, { width: colWidths.comp });
+      doc.text(fmtMonto(c.monto_neto, moneda), 40 + colWidths.desc + colWidths.comp, yFila, { width: colWidths.neto, align: 'right' });
+      doc.text(impuestos !== 0 ? fmtMonto(impuestos, moneda) : '', 40 + colWidths.desc + colWidths.comp + colWidths.neto, yFila, { width: colWidths.imp, align: 'right' });
+      doc.font('Helvetica-Bold');
+      doc.text(fmtMonto(c.monto_total, moneda), 40 + colWidths.desc + colWidths.comp + colWidths.neto + colWidths.imp, yFila, { width: colWidths.total, align: 'right' });
+
+      doc.y = yFila + Math.max(alturaDesc, 12) + 6;
+      doc.moveTo(40, doc.y - 2).lineTo(40 + anchoPagina, doc.y - 2).strokeColor('#e0e0e0').stroke();
+    });
+
+    const total = lista.reduce((s, c) => s + Number(c.monto_total), 0);
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#1a2744');
+    doc.text('Total', 40 + colWidths.desc + colWidths.comp + colWidths.neto, doc.y, { width: colWidths.imp, align: 'right' });
+    doc.text(fmtMonto(total, moneda), 40 + colWidths.desc + colWidths.comp + colWidths.neto + colWidths.imp, doc.y - 12, { width: colWidths.total, align: 'right' });
+    doc.moveDown(1);
+  });
+
+  doc.end();
+});
