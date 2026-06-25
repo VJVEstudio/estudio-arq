@@ -71,7 +71,6 @@ router.post('/', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Bloqueamos las filas existentes para evitar números duplicados en creaciones simultáneas
     await client.query(
       `SELECT id FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 FOR UPDATE`,
       [proyecto_id, tipo.trim().toUpperCase()]
@@ -143,16 +142,6 @@ router.post('/:id/comprobantes', async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-  const { rows } = await query(
-    `INSERT INTO rendicion_comprobantes
-       (rendicion_id, orden, descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, monto_total)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-    [req.params.id, ordenRows[0].siguiente, descripcion.trim(), numero_comprobante || null,
-     moneda || 'ARS', neto, ivaNum, iibbNum, total]
-  );
-  res.status(201).json(rows[0]);
-});
-
 // PUT /api/rendiciones/comprobantes/:comprobanteId
 router.put('/comprobantes/:comprobanteId', async (req, res) => {
   const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor } = req.body;
@@ -199,7 +188,7 @@ router.get('/:id/pdf', async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${rendicion.tipo}${rendicion.numero}.pdf"`);
 
-  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
   doc.pipe(res);
 
   const fmtMonto = (n, moneda) => {
@@ -208,7 +197,7 @@ router.get('/:id/pdf', async (req, res) => {
     const abs = Math.abs(num).toLocaleString('es-AR', { minimumFractionDigits: 2 });
     return moneda === 'USD' ? `${signo}USD ${abs}` : `${signo}$ ${abs}`;
   };
-const fmtFecha = (f) => {
+  const fmtFecha = (f) => {
     if (!f) return '—';
     let fechaStr;
     if (f instanceof Date) {
@@ -224,63 +213,96 @@ const fmtFecha = (f) => {
     return d.toLocaleDateString('es-AR');
   };
 
-  // Encabezado
-  doc.fontSize(14).font('Helvetica-Bold').fillColor('#1a1a1a')
-    .text(rendicion.cliente_nombre.toUpperCase());
-  doc.moveDown(0.3);
-  doc.fontSize(11).font('Helvetica').fillColor('#666')
-    .text(rendicion.proyecto_nombre.toUpperCase());
-  doc.moveDown(0.3);
-  doc.fontSize(12).font('Helvetica-Bold').fillColor('#1a2744')
-    .text(`${rendicion.tipo}${rendicion.numero}`, { align: 'right' });
-  doc.moveDown(0.2);
-  doc.fontSize(10).font('Helvetica').fillColor('#666')
-    .text(fmtFecha(rendicion.fecha));
-  doc.moveDown(1);
+  const margenIzq = 30;
+  const anchoTotal = doc.page.width - 60;
+  const cols = [
+    { x: margenIzq, w: 280 },
+    { x: margenIzq + 280, w: 110 },
+    { x: margenIzq + 390, w: 110 },
+    { x: margenIzq + 500, w: 90 },
+    { x: margenIzq + 590, w: anchoTotal - 590 },
+  ];
 
-  const anchoPagina = doc.page.width - 80;
-  const colWidths = { desc: 230, comp: 110, neto: 90, imp: 70, total: 95 };
+  doc.fontSize(13).font('Helvetica-Bold').fillColor('#000')
+    .text(rendicion.cliente_nombre.toUpperCase(), margenIzq, 30);
+  doc.moveDown(1.2);
+  doc.fontSize(11).font('Helvetica').text('OBRA', margenIzq);
+  doc.fontSize(22).font('Helvetica-Bold')
+    .text(`${rendicion.tipo}${rendicion.numero}`, cols[4].x, 30, { width: cols[4].w, align: 'right' });
+  doc.moveDown(1.5);
+  doc.fontSize(10).font('Helvetica').text(fmtFecha(rendicion.fecha), margenIzq, doc.y);
+  doc.moveDown(0.8);
 
   const porMoneda = { ARS: [], USD: [] };
   comprobantes.forEach(c => { porMoneda[c.moneda]?.push(c); });
+
+  // Paleta de colores para diferenciar proveedores
+  const paletaColores = ['#dbe9f5', '#fce4d6', '#e2efda', '#fff2cc', '#d9d2e9', '#f4cccc', '#d0e0e3', '#fce5cd'];
+  const coloresPorProveedor = {};
+  let siguienteColor = 0;
+  const obtenerColor = (proveedor) => {
+    const clave = proveedor || '__sin_proveedor__';
+    if (!coloresPorProveedor[clave]) {
+      coloresPorProveedor[clave] = paletaColores[siguienteColor % paletaColores.length];
+      siguienteColor++;
+    }
+    return coloresPorProveedor[clave];
+  };
+
+  let y = doc.y;
+  const altoFila = 20;
 
   ['ARS', 'USD'].forEach(moneda => {
     const lista = porMoneda[moneda];
     if (!lista.length) return;
 
-    if (doc.y > 650) doc.addPage();
+    if (y > 480) { doc.addPage(); y = 30; }
 
     if (moneda === 'USD') {
-      doc.moveDown(0.5);
-      doc.fontSize(11).font('Helvetica-Bold').fillColor('#1a1a1a').text('USD');
-      doc.moveDown(0.3);
+      doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke('#fff', '#ccc');
+      doc.fillColor('#000').fontSize(10).font('Helvetica-Bold').text('USD', cols[0].x + 4, y + 5);
+      y += altoFila;
     }
 
-    lista.forEach(c => {
-      if (doc.y > 720) doc.addPage();
-      const yFila = doc.y;
+    lista.forEach((c) => {
+      if (y > 520) { doc.addPage(); y = 30; }
+      const fondo = obtenerColor(c.proveedor);
+
+      doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke(fondo, '#bbb');
+      cols.slice(1).forEach(c2 => {
+        doc.moveTo(c2.x, y).lineTo(c2.x, y + altoFila).strokeColor('#bbb').stroke();
+      });
+
+      const esNegativo = Number(c.monto_total) < 0;
+      doc.fillColor('#000').fontSize(8).font('Helvetica');
+      doc.text(c.descripcion, cols[0].x + 4, y + 6, { width: cols[0].w - 8, ellipsis: true });
+      doc.text(c.numero_comprobante || '', cols[1].x + 4, y + 6, { width: cols[1].w - 8 });
+
+      doc.fillColor(esNegativo ? '#c00000' : '#000');
+      doc.text(fmtMonto(c.monto_neto, moneda), cols[2].x, y + 6, { width: cols[2].w - 6, align: 'right' });
+
       const impuestos = Number(c.iva) + Number(c.iibb);
+      doc.fillColor('#000');
+      doc.text(impuestos !== 0 ? fmtMonto(impuestos, moneda) : '', cols[3].x, y + 6, { width: cols[3].w - 6, align: 'right' });
 
-      doc.fontSize(9).font('Helvetica').fillColor('#1a1a1a');
-      doc.text(c.descripcion, 40, yFila, { width: colWidths.desc });
-      const alturaDesc = doc.heightOfString(c.descripcion, { width: colWidths.desc });
+      doc.fillColor(esNegativo ? '#c00000' : '#000').font('Helvetica-Bold');
+      doc.text(fmtMonto(c.monto_total, moneda), cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
 
-      doc.text(c.numero_comprobante || '—', 40 + colWidths.desc, yFila, { width: colWidths.comp });
-      doc.text(fmtMonto(c.monto_neto, moneda), 40 + colWidths.desc + colWidths.comp, yFila, { width: colWidths.neto, align: 'right' });
-      doc.text(impuestos !== 0 ? fmtMonto(impuestos, moneda) : '', 40 + colWidths.desc + colWidths.comp + colWidths.neto, yFila, { width: colWidths.imp, align: 'right' });
-      doc.font('Helvetica-Bold');
-      doc.text(fmtMonto(c.monto_total, moneda), 40 + colWidths.desc + colWidths.comp + colWidths.neto + colWidths.imp, yFila, { width: colWidths.total, align: 'right' });
-
-      doc.y = yFila + Math.max(alturaDesc, 12) + 6;
-      doc.moveTo(40, doc.y - 2).lineTo(40 + anchoPagina, doc.y - 2).strokeColor('#e0e0e0').stroke();
+      y += altoFila;
     });
 
     const total = lista.reduce((s, c) => s + Number(c.monto_total), 0);
-    doc.moveDown(0.3);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('#1a2744');
-    doc.text('Total', 40 + colWidths.desc + colWidths.comp + colWidths.neto, doc.y, { width: colWidths.imp, align: 'right' });
-    doc.text(fmtMonto(total, moneda), 40 + colWidths.desc + colWidths.comp + colWidths.neto + colWidths.imp, doc.y - 12, { width: colWidths.total, align: 'right' });
-    doc.moveDown(1);
+    doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke('#fff', '#bbb');
+    cols.slice(1).forEach(c2 => {
+      doc.moveTo(c2.x, y).lineTo(c2.x, y + altoFila).strokeColor('#bbb').stroke();
+    });
+    doc.fillColor('#000').fontSize(9).font('Helvetica-Bold');
+    doc.text('Total', cols[3].x, y + 6, { width: cols[3].w - 6, align: 'right' });
+    doc.rect(cols[4].x, y, cols[4].w, altoFila).fillAndStroke('#d9d9d9', '#bbb');
+    doc.fillColor('#000');
+    doc.text(fmtMonto(total, moneda), cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
+
+    y += altoFila + 14;
   });
 
   doc.end();
