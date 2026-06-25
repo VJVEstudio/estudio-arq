@@ -49,10 +49,10 @@ router.get('/proyecto/:id', async (req, res) => {
     porDibujante[h.dibujante_nombre].horas += Number(h.horas);
     porDibujante[h.dibujante_nombre].costo += Number(h.costo_total);
   });
-  const timeline = [
-    ...ingresos.map(i => ({ fecha: i.fecha, tipo: 'ingreso', ...i })),
-    ...egresos.map(e => ({ fecha: e.fecha, tipo: 'egreso', ...e })),
-    ...horas.map(h => ({ fecha: h.fecha, tipo: 'horas', ...h })),
+const timeline = [
+    ...ingresos.map(i => ({ ...i, fecha: i.fecha, tipo: 'ingreso' })),
+    ...egresos.map(e => ({ ...e, fecha: e.fecha, tipo: 'egreso' })),
+    ...horas.map(h => ({ ...h, fecha: h.fecha, tipo: 'horas' })),
   ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
   // Resultado total en pesos usando la cotización guardada de cada registro en USD
