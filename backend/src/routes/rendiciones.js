@@ -188,7 +188,7 @@ router.get('/:id/pdf', async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${rendicion.tipo}${rendicion.numero}.pdf"`);
 
-  const doc = new PDFDocument({ margin: 35, size: 'A4' }); // portrait
+  const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
   doc.pipe(res);
 
   const fmtMonto = (n, moneda) => {
@@ -213,18 +213,18 @@ router.get('/:id/pdf', async (req, res) => {
     return d.toLocaleDateString('es-AR');
   };
 
-  const margenIzq = 35;
-  const anchoTotal = doc.page.width - 70;
-  // Columnas: Concepto | Fecha | Comprobante | Neto | IVA | IIBB y otros
-const cols = [
-    { x: margenIzq, w: 110, label: 'Proveedor' },
-    { x: margenIzq + 110, w: 110, label: 'Concepto' },
-    { x: margenIzq + 220, w: 45, label: 'Fecha' },
-    { x: margenIzq + 265, w: 65, label: 'Comprobante' },
-    { x: margenIzq + 330, w: 58, label: 'Neto' },
-    { x: margenIzq + 388, w: 45, label: 'IVA' },
-    { x: margenIzq + 433, w: 55, label: 'IIBB y otros' },
-    { x: margenIzq + 488, w: anchoTotal - 488, label: 'Subtotal' },
+  const margenIzq = 30;
+  const anchoTotal = doc.page.width - 60;
+  // Columnas: Proveedor | Concepto | Fecha | Comprobante | Neto | IVA | IIBB y otros | Subtotal
+  const cols = [
+    { x: margenIzq,       w: 130, label: 'Proveedor',    align: 'left'  },
+    { x: margenIzq + 130, w: 180, label: 'Concepto',     align: 'left'  },
+    { x: margenIzq + 310, w: 60,  label: 'Fecha',        align: 'right' },
+    { x: margenIzq + 370, w: 90,  label: 'Comprobante',  align: 'right' },
+    { x: margenIzq + 460, w: 85,  label: 'Neto',         align: 'right' },
+    { x: margenIzq + 545, w: 65,  label: 'IVA',          align: 'right' },
+    { x: margenIzq + 610, w: 75,  label: 'IIBB y otros', align: 'right' },
+    { x: margenIzq + 685, w: anchoTotal - 685, label: 'Subtotal', align: 'right' },
   ];
 
   // ── Encabezado ──
@@ -265,11 +265,11 @@ const cols = [
   const altoFila = 22;
   const altoEncabezado = 18;
 
-  const dibujarEncabezadoColumnas = (y) => {
+const dibujarEncabezadoColumnas = (y) => {
     doc.rect(margenIzq, y, anchoTotal, altoEncabezado).fillAndStroke('#404040', '#404040');
     cols.forEach(c => {
       doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold')
-        .text(c.label, c.x + 4, y + 5, { width: c.w - 8, align: c.label === 'Concepto' ? 'left' : 'right' });
+        .text(c.label, c.x + 4, y + 5, { width: c.w - 8, align: c.align });
     });
     return y + altoEncabezado;
   };
