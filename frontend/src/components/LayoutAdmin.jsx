@@ -11,10 +11,12 @@ const NAV = [
   { grupo: 'Gestión', items: [
     { to: '/admin/clientes-proyectos', label: 'Clientes y Proyectos', icono: '📐' },
   ]},
-  { grupo: 'Finanzas', items: [
+{ grupo: 'Finanzas', items: [
+    { to: '/admin/movimientos', label: 'Movimientos', icono: '↕' },
     { to: '/admin/ingresos', label: 'Ingresos', icono: '↑' },
     { to: '/admin/egresos',  label: 'Egresos',  icono: '↓' },
     { to: '/admin/balance',  label: 'Balance',  icono: '⇄' },
+  ]},
   ]},
   { grupo: 'Equipo', items: [
     { to: '/admin/dibujantes', label: 'Dibujantes', icono: '✏' },
