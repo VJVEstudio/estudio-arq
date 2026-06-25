@@ -28,6 +28,17 @@ router.get('/', async (req, res) => {
   res.json(rows);
 });
 
+// GET /api/rendiciones/siguiente-numero/calcular?proyecto_id=&tipo=
+router.get('/siguiente-numero/calcular', async (req, res) => {
+  const { proyecto_id, tipo } = req.query;
+  if (!proyecto_id || !tipo) return res.status(400).json({ error: 'proyecto_id y tipo son obligatorios' });
+  const { rows } = await query(
+    `SELECT COALESCE(MAX(numero), 0) + 1 AS siguiente FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2`,
+    [proyecto_id, tipo]
+  );
+  res.json({ siguiente: rows[0].siguiente });
+});
+
 // GET /api/rendiciones/:id (con sus comprobantes)
 router.get('/:id', async (req, res) => {
   const { rows: [rendicion] } = await query(
@@ -48,22 +59,6 @@ router.get('/:id', async (req, res) => {
   res.json({ ...rendicion, comprobantes });
 });
 
-// GET /api/rendiciones/siguiente-numero?proyecto_id=&tipo=
-router.get('/siguiente-numero/calcular', async (req, res) => {
-  const { proyecto_id, tipo } = req.query;
-  if (!proyecto_id || !tipo) return res.status(400).json({ error: 'proyecto_id y tipo son obligatorios' });
-  // Bloqueamos las filas existentes para evitar números duplicados en creaciones simultáneas
-    await client.query(
-      `SELECT id FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 FOR UPDATE`,
-      [proyecto_id, tipo.trim().toUpperCase()]
-    );
-    const { rows: numRows } = await client.query(
-      `SELECT COALESCE(MAX(numero), 0) + 1 AS siguiente FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2`,
-      [proyecto_id, tipo.trim().toUpperCase()]
-    );
-  res.json({ siguiente: rows[0].siguiente });
-});
-
 // POST /api/rendiciones
 router.post('/', async (req, res) => {
   const { proyecto_id, tipo, fecha, notas } = req.body;
@@ -74,8 +69,14 @@ router.post('/', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Bloqueamos las filas existentes para evitar números duplicados en creaciones simultáneas
+    await client.query(
+      `SELECT id FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 FOR UPDATE`,
+      [proyecto_id, tipo.trim().toUpperCase()]
+    );
     const { rows: numRows } = await client.query(
-      `SELECT COALESCE(MAX(numero), 0) + 1 AS siguiente FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 FOR UPDATE`,
+      `SELECT COALESCE(MAX(numero), 0) + 1 AS siguiente FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2`,
       [proyecto_id, tipo.trim().toUpperCase()]
     );
     const numero = numRows[0].siguiente;
