@@ -120,7 +120,7 @@ router.delete('/:id', async (req, res) => {
 
 // POST /api/rendiciones/:id/comprobantes
 router.post('/:id/comprobantes', async (req, res) => {
-  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor } = req.body;
+  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor, fecha } = req.body;
   if (!descripcion?.trim()) return res.status(400).json({ error: 'La descripción es obligatoria' });
   const neto = Number(monto_neto || 0);
   const ivaNum = Number(iva || 0);
@@ -134,17 +134,17 @@ router.post('/:id/comprobantes', async (req, res) => {
 
   const { rows } = await query(
     `INSERT INTO rendicion_comprobantes
-       (rendicion_id, orden, descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, monto_total, proveedor)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+       (rendicion_id, orden, descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, monto_total, proveedor, fecha)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
     [req.params.id, ordenRows[0].siguiente, descripcion.trim(), numero_comprobante || null,
-     moneda || 'ARS', neto, ivaNum, iibbNum, total, proveedor?.trim() || null]
+     moneda || 'ARS', neto, ivaNum, iibbNum, total, proveedor?.trim() || null, fecha || null]
   );
   res.status(201).json(rows[0]);
 });
 
 // PUT /api/rendiciones/comprobantes/:comprobanteId
 router.put('/comprobantes/:comprobanteId', async (req, res) => {
-  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor } = req.body;
+  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor, fecha } = req.body;
   if (!descripcion?.trim()) return res.status(400).json({ error: 'La descripción es obligatoria' });
   const neto = Number(monto_neto || 0);
   const ivaNum = Number(iva || 0);
@@ -153,9 +153,9 @@ router.put('/comprobantes/:comprobanteId', async (req, res) => {
 
   const { rows } = await query(
     `UPDATE rendicion_comprobantes
-     SET descripcion=$1, numero_comprobante=$2, moneda=$3, monto_neto=$4, iva=$5, iibb=$6, monto_total=$7, proveedor=$8
-     WHERE id=$9 RETURNING *`,
-    [descripcion.trim(), numero_comprobante || null, moneda || 'ARS', neto, ivaNum, iibbNum, total, proveedor?.trim() || null, req.params.comprobanteId]
+     SET descripcion=$1, numero_comprobante=$2, moneda=$3, monto_neto=$4, iva=$5, iibb=$6, monto_total=$7, proveedor=$8, fecha=$9
+     WHERE id=$10 RETURNING *`,
+    [descripcion.trim(), numero_comprobante || null, moneda || 'ARS', neto, ivaNum, iibbNum, total, proveedor?.trim() || null, fecha || null, req.params.comprobanteId]
   );
   if (!rows[0]) return res.status(404).json({ error: 'Comprobante no encontrado' });
   res.json(rows[0]);
@@ -188,7 +188,7 @@ router.get('/:id/pdf', async (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${rendicion.tipo}${rendicion.numero}.pdf"`);
 
-  const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+  const doc = new PDFDocument({ margin: 35, size: 'A4' }); // portrait
   doc.pipe(res);
 
   const fmtMonto = (n, moneda) => {
@@ -213,30 +213,41 @@ router.get('/:id/pdf', async (req, res) => {
     return d.toLocaleDateString('es-AR');
   };
 
-  const margenIzq = 30;
-  const anchoTotal = doc.page.width - 60;
+  const margenIzq = 35;
+  const anchoTotal = doc.page.width - 70;
+  // Columnas: Concepto | Fecha | Comprobante | Neto | IVA | IIBB y otros
   const cols = [
-    { x: margenIzq, w: 280 },
-    { x: margenIzq + 280, w: 110 },
-    { x: margenIzq + 390, w: 110 },
-    { x: margenIzq + 500, w: 90 },
-    { x: margenIzq + 590, w: anchoTotal - 590 },
+    { x: margenIzq, w: 165, label: 'Concepto' },
+    { x: margenIzq + 165, w: 55, label: 'Fecha' },
+    { x: margenIzq + 220, w: 85, label: 'Comprobante' },
+    { x: margenIzq + 305, w: 75, label: 'Neto' },
+    { x: margenIzq + 380, w: 60, label: 'IVA' },
+    { x: margenIzq + 440, w: anchoTotal - 440, label: 'IIBB y otros' },
   ];
 
+  // ── Encabezado ──
   doc.fontSize(13).font('Helvetica-Bold').fillColor('#000')
-    .text(rendicion.cliente_nombre.toUpperCase(), margenIzq, 30);
-  doc.moveDown(1.2);
+    .text(rendicion.cliente_nombre.toUpperCase(), margenIzq, 35);
+  doc.moveDown(1);
   doc.fontSize(11).font('Helvetica').text('OBRA', margenIzq);
-  doc.fontSize(22).font('Helvetica-Bold')
-    .text(`${rendicion.tipo}${rendicion.numero}`, cols[4].x, 30, { width: cols[4].w, align: 'right' });
+
+  // Recuadro gris para el número de rendición, 10% más grande
+  const numTexto = `${rendicion.tipo}${rendicion.numero}`;
+  doc.fontSize(24).font('Helvetica-Bold'); // ~10% más grande que el 22 anterior
+  const anchoNum = doc.widthOfString(numTexto) + 24;
+  const altoNum = 34;
+  const xNum = margenIzq + anchoTotal - anchoNum;
+  const yNum = 30;
+  doc.rect(xNum, yNum, anchoNum, altoNum).fillOpacity(0.8).fill('#d9d9d9').fillOpacity(1);
+  doc.fillColor('#000').text(numTexto, xNum, yNum + 6, { width: anchoNum, align: 'center' });
+
   doc.moveDown(1.5);
-  doc.fontSize(10).font('Helvetica').text(fmtFecha(rendicion.fecha), margenIzq, doc.y);
+  doc.fontSize(10).font('Helvetica').fillColor('#000').text(fmtFecha(rendicion.fecha), margenIzq, doc.y);
   doc.moveDown(0.8);
 
   const porMoneda = { ARS: [], USD: [] };
   comprobantes.forEach(c => { porMoneda[c.moneda]?.push(c); });
 
-  // Paleta de colores para diferenciar proveedores
   const paletaColores = ['#dbe9f5', '#fce4d6', '#e2efda', '#fff2cc', '#d9d2e9', '#f4cccc', '#d0e0e3', '#fce5cd'];
   const coloresPorProveedor = {};
   let siguienteColor = 0;
@@ -249,23 +260,35 @@ router.get('/:id/pdf', async (req, res) => {
     return coloresPorProveedor[clave];
   };
 
+  const altoFila = 22;
+  const altoEncabezado = 18;
+
+  const dibujarEncabezadoColumnas = (y) => {
+    doc.rect(margenIzq, y, anchoTotal, altoEncabezado).fillAndStroke('#404040', '#404040');
+    cols.forEach(c => {
+      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold')
+        .text(c.label, c.x + 4, y + 5, { width: c.w - 8, align: c.label === 'Concepto' ? 'left' : 'right' });
+    });
+    return y + altoEncabezado;
+  };
+
   let y = doc.y;
-  const altoFila = 20;
+  y = dibujarEncabezadoColumnas(y);
 
   ['ARS', 'USD'].forEach(moneda => {
     const lista = porMoneda[moneda];
     if (!lista.length) return;
 
-    if (y > 480) { doc.addPage(); y = 30; }
+    if (y > 700) { doc.addPage(); y = 35; y = dibujarEncabezadoColumnas(y); }
 
     if (moneda === 'USD') {
       doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke('#fff', '#ccc');
-      doc.fillColor('#000').fontSize(10).font('Helvetica-Bold').text('USD', cols[0].x + 4, y + 5);
+      doc.fillColor('#000').fontSize(10).font('Helvetica-Bold').text('USD', cols[0].x + 4, y + 6);
       y += altoFila;
     }
 
     lista.forEach((c) => {
-      if (y > 520) { doc.addPage(); y = 30; }
+      if (y > 740) { doc.addPage(); y = 35; y = dibujarEncabezadoColumnas(y); }
       const fondo = obtenerColor(c.proveedor);
 
       doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke(fondo, '#bbb');
@@ -276,17 +299,15 @@ router.get('/:id/pdf', async (req, res) => {
       const esNegativo = Number(c.monto_total) < 0;
       doc.fillColor('#000').fontSize(8).font('Helvetica');
       doc.text(c.descripcion, cols[0].x + 4, y + 6, { width: cols[0].w - 8, ellipsis: true });
-      doc.text(c.numero_comprobante || '', cols[1].x + 4, y + 6, { width: cols[1].w - 8 });
+      doc.text(fmtFecha(c.fecha), cols[1].x + 2, y + 6, { width: cols[1].w - 4, align: 'right' });
+      doc.text(c.numero_comprobante || '', cols[2].x + 2, y + 6, { width: cols[2].w - 4, align: 'right' });
 
       doc.fillColor(esNegativo ? '#c00000' : '#000');
-      doc.text(fmtMonto(c.monto_neto, moneda), cols[2].x, y + 6, { width: cols[2].w - 6, align: 'right' });
+      doc.text(fmtMonto(c.monto_neto, moneda), cols[3].x, y + 6, { width: cols[3].w - 6, align: 'right' });
 
-      const impuestos = Number(c.iva) + Number(c.iibb);
       doc.fillColor('#000');
-      doc.text(impuestos !== 0 ? fmtMonto(impuestos, moneda) : '', cols[3].x, y + 6, { width: cols[3].w - 6, align: 'right' });
-
-      doc.fillColor(esNegativo ? '#c00000' : '#000').font('Helvetica-Bold');
-      doc.text(fmtMonto(c.monto_total, moneda), cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
+      doc.text(Number(c.iva) !== 0 ? fmtMonto(c.iva, moneda) : '', cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
+      doc.text(Number(c.iibb) !== 0 ? fmtMonto(c.iibb, moneda) : '', cols[5].x, y + 6, { width: cols[5].w - 6, align: 'right' });
 
       y += altoFila;
     });
@@ -297,12 +318,12 @@ router.get('/:id/pdf', async (req, res) => {
       doc.moveTo(c2.x, y).lineTo(c2.x, y + altoFila).strokeColor('#bbb').stroke();
     });
     doc.fillColor('#000').fontSize(9).font('Helvetica-Bold');
-    doc.text('Total', cols[3].x, y + 6, { width: cols[3].w - 6, align: 'right' });
-    doc.rect(cols[4].x, y, cols[4].w, altoFila).fillAndStroke('#d9d9d9', '#bbb');
+    doc.text('Total', cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
+    doc.rect(cols[5].x, y, cols[5].w, altoFila).fillAndStroke('#d9d9d9', '#bbb');
     doc.fillColor('#000');
-    doc.text(fmtMonto(total, moneda), cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
+    doc.text(fmtMonto(total, moneda), cols[5].x, y + 6, { width: cols[5].w - 6, align: 'right' });
 
-    y += altoFila + 14;
+    y += altoFila + 16;
   });
 
   doc.end();
