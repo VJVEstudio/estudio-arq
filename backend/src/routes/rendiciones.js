@@ -52,10 +52,15 @@ router.get('/:id', async (req, res) => {
 router.get('/siguiente-numero/calcular', async (req, res) => {
   const { proyecto_id, tipo } = req.query;
   if (!proyecto_id || !tipo) return res.status(400).json({ error: 'proyecto_id y tipo son obligatorios' });
-  const { rows } = await query(
-    `SELECT COALESCE(MAX(numero), 0) + 1 AS siguiente FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2`,
-    [proyecto_id, tipo]
-  );
+  // Bloqueamos las filas existentes para evitar números duplicados en creaciones simultáneas
+    await client.query(
+      `SELECT id FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 FOR UPDATE`,
+      [proyecto_id, tipo.trim().toUpperCase()]
+    );
+    const { rows: numRows } = await client.query(
+      `SELECT COALESCE(MAX(numero), 0) + 1 AS siguiente FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2`,
+      [proyecto_id, tipo.trim().toUpperCase()]
+    );
   res.json({ siguiente: rows[0].siguiente });
 });
 
