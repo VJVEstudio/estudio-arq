@@ -27,6 +27,7 @@ const [form, setForm] = useState({
     descripcion: inicial.descripcion || '',
     numero_comprobante: inicial.numero_comprobante || '',
     proveedor: inicial.proveedor || '',
+    fecha: inicial.fecha ? String(inicial.fecha).slice(0, 10) : new Date().toISOString().split('T')[0],
     moneda: inicial.moneda || 'ARS',
     monto_neto: inicial.monto_neto ?? '',
     iva: inicial.iva ?? '',
@@ -60,10 +61,13 @@ const [form, setForm] = useState({
 <Campo label="Descripción *" error={errores.descripcion}>
         <Input value={form.descripcion} onChange={set('descripcion')} placeholder="Ej: Cerramientos y Estructuras - Certificado Obra" autoFocus />
       </Campo>
-      <Campo label="Proveedor">
+<Campo label="Proveedor">
         <Input value={form.proveedor} onChange={set('proveedor')} placeholder="Ej: Cerramientos y Estructuras SA" />
       </Campo>
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '16px' }}>
+        <Campo label="Fecha">
+          <Input type="date" value={form.fecha} onChange={set('fecha')} />
+        </Campo>
         <Campo label="N° de comprobante">
           <Input value={form.numero_comprobante} onChange={set('numero_comprobante')} placeholder="A00003-00004197" />
         </Campo>
