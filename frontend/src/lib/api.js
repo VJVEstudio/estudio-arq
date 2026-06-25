@@ -40,19 +40,17 @@ export async function api(endpoint, opts = {}) {
     });
   };
 
-  let res = await hacerPeticion(accessToken);
-
+let res = await hacerPeticion(accessToken);
   if (res.status === 401) {
-    const data = await res.json().catch(() => ({}));
-    if (data.code === 'TOKEN_EXPIRED') {
-      try {
-        const nuevoToken = await renovarToken();
-        res = await hacerPeticion(nuevoToken);
-      } catch {
-        clearAccessToken();
-        window.dispatchEvent(new Event('auth:logout'));
-        throw new Error('Sesión expirada. Por favor, iniciá sesión nuevamente.');
-      }
+    // Intentamos renovar ante cualquier 401 (token expirado, ausente, o inválido),
+    // no solo cuando el backend marca explícitamente TOKEN_EXPIRED.
+    try {
+      const nuevoToken = await renovarToken();
+      res = await hacerPeticion(nuevoToken);
+    } catch {
+      clearAccessToken();
+      window.dispatchEvent(new Event('auth:logout'));
+      throw new Error('Sesión expirada. Por favor, iniciá sesión nuevamente.');
     }
   }
 
