@@ -7,6 +7,7 @@ import {
 } from '../../components/ui';
 
 const AZUL = '#1a2744';
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
@@ -137,7 +138,8 @@ export default function RendicionDetalle() {
           </p>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#999' }}>{fmtF(rendicion.fecha)}</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+<div style={{ display: 'flex', gap: '8px' }}>
+          <Boton variante="secundario" onClick={() => window.open(`${BASE}/rendiciones/${id}/pdf`, '_blank')}>⬇ Exportar PDF</Boton>
           <Boton onClick={() => setModal('crear')}>+ Agregar comprobante</Boton>
         </div>
       </div>
