@@ -16,6 +16,7 @@ const NAV = [
     { to: '/admin/ingresos', label: 'Ingresos', icono: '↑' },
     { to: '/admin/egresos',  label: 'Egresos',  icono: '↓' },
     { to: '/admin/balance',  label: 'Balance',  icono: '⇄' },
+    { to: '/admin/rendiciones', label: 'Rendiciones', icono: '📋' },
   ]},
   { grupo: 'Equipo', items: [
     { to: '/admin/dibujantes', label: 'Dibujantes', icono: '✏' },
