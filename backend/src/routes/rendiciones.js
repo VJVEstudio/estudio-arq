@@ -217,13 +217,14 @@ router.get('/:id/pdf', async (req, res) => {
   const anchoTotal = doc.page.width - 70;
   // Columnas: Concepto | Fecha | Comprobante | Neto | IVA | IIBB y otros
 const cols = [
-    { x: margenIzq, w: 130, label: 'Concepto' },
-    { x: margenIzq + 130, w: 48, label: 'Fecha' },
-    { x: margenIzq + 178, w: 75, label: 'Comprobante' },
-    { x: margenIzq + 253, w: 65, label: 'Neto' },
-    { x: margenIzq + 318, w: 50, label: 'IVA' },
-    { x: margenIzq + 368, w: 65, label: 'IIBB y otros' },
-    { x: margenIzq + 433, w: anchoTotal - 433, label: 'Subtotal' },
+    { x: margenIzq, w: 110, label: 'Proveedor' },
+    { x: margenIzq + 110, w: 110, label: 'Concepto' },
+    { x: margenIzq + 220, w: 45, label: 'Fecha' },
+    { x: margenIzq + 265, w: 65, label: 'Comprobante' },
+    { x: margenIzq + 330, w: 58, label: 'Neto' },
+    { x: margenIzq + 388, w: 45, label: 'IVA' },
+    { x: margenIzq + 433, w: 55, label: 'IIBB y otros' },
+    { x: margenIzq + 488, w: anchoTotal - 488, label: 'Subtotal' },
   ];
 
   // ── Encabezado ──
