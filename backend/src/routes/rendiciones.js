@@ -2,7 +2,11 @@ const express = require('express');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 const PDFDocument = require('pdfkit');
+const multer = require('multer');
+const { subirArchivo } = require('../utils/supabaseStorage');
+const { leerComprobante } = require('../utils/ocrComprobante');
 
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
 
