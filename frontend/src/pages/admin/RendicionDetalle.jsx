@@ -274,10 +274,17 @@ export default function RendicionDetalle() {
         </p>
       )}
 
-      {modal === 'crear' && (
+{modal === 'crear' && (
         <Modal titulo="Agregar comprobante" onCerrar={cerrarModal} ancho={560}>
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
-          <FormComprobante onGuardar={handleGuardar} onCancelar={cerrarModal} guardando={guardando} />
+          <FormComprobante rendicionId={id} onGuardar={handleGuardar} onCancelar={cerrarModal} guardando={guardando} />
+        </Modal>
+      )}
+
+      {modal && modal !== 'crear' && !modal.eliminar && (
+        <Modal titulo="Editar comprobante" onCerrar={cerrarModal} ancho={560}>
+          <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
+          <FormComprobante inicial={modal} rendicionId={id} onGuardar={handleGuardar} onCancelar={cerrarModal} guardando={guardando} />
         </Modal>
       )}
 
