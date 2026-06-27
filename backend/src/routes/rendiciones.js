@@ -124,7 +124,7 @@ router.delete('/:id', async (req, res) => {
 
 // POST /api/rendiciones/:id/comprobantes
 router.post('/:id/comprobantes', async (req, res) => {
-  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor, fecha } = req.body;
+  const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor, fecha, archivo_url } = req.body;
   if (!descripcion?.trim()) return res.status(400).json({ error: 'La descripción es obligatoria' });
   const neto = Number(monto_neto || 0);
   const ivaNum = Number(iva || 0);
@@ -138,10 +138,10 @@ router.post('/:id/comprobantes', async (req, res) => {
 
   const { rows } = await query(
     `INSERT INTO rendicion_comprobantes
-       (rendicion_id, orden, descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, monto_total, proveedor, fecha)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+       (rendicion_id, orden, descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, monto_total, proveedor, fecha, archivo_url)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
     [req.params.id, ordenRows[0].siguiente, descripcion.trim(), numero_comprobante || null,
-     moneda || 'ARS', neto, ivaNum, iibbNum, total, proveedor?.trim() || null, fecha || null]
+     moneda || 'ARS', neto, ivaNum, iibbNum, total, proveedor?.trim() || null, fecha || null, archivo_url || null]
   );
   res.status(201).json(rows[0]);
 });
@@ -171,7 +171,30 @@ router.delete('/comprobantes/:comprobanteId', async (req, res) => {
   if (!rows[0]) return res.status(404).json({ error: 'Comprobante no encontrado' });
   res.status(204).send();
 });
+// POST /api/rendiciones/:id/comprobantes/ocr — sube un archivo y extrae los datos con OCR
+router.post('/:id/comprobantes/ocr', upload.single('archivo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
 
+  try {
+    const { buffer, mimetype, originalname } = req.file;
+
+    const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!tiposPermitidos.includes(mimetype)) {
+      return res.status(400).json({ error: 'Formato no soportado. Usá JPG, PNG, WEBP o PDF.' });
+    }
+
+    // Subir el archivo a Supabase Storage en paralelo con el OCR
+    const [archivoUrl, datosExtraidos] = await Promise.all([
+      subirArchivo(buffer, originalname, mimetype),
+      leerComprobante(buffer, mimetype),
+    ]);
+
+    res.json({ ...datosExtraidos, archivo_url: archivoUrl });
+  } catch (err) {
+    console.error('Error procesando OCR:', err);
+    res.status(500).json({ error: err.message || 'Error al procesar el comprobante' });
+  }
+});
 // GET /api/rendiciones/:id/pdf
 router.get('/:id/pdf', async (req, res) => {
   const { rows: [rendicion] } = await query(
