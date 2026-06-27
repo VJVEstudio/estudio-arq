@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRendicion } from '../../hooks/useRendiciones';
 import { getAccessToken } from '../../lib/api';
@@ -22,8 +22,8 @@ const fmtF = (f) => {
   return d.toLocaleDateString('es-AR');
 };
 
-function FormComprobante({ inicial = {}, onGuardar, onCancelar, guardando }) {
-const [form, setForm] = useState({
+function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, guardando }) {
+  const [form, setForm] = useState({
     descripcion: inicial.descripcion || '',
     numero_comprobante: inicial.numero_comprobante || '',
     proveedor: inicial.proveedor || '',
@@ -32,9 +32,53 @@ const [form, setForm] = useState({
     monto_neto: inicial.monto_neto ?? '',
     iva: inicial.iva ?? '',
     iibb: inicial.iibb ?? '',
+    archivo_url: inicial.archivo_url || '',
   });
   const [errores, setErrores] = useState({});
+  const [procesandoOCR, setProcesandoOCR] = useState(false);
+  const [errorOCR, setErrorOCR] = useState('');
+  const inputArchivoRef = useRef(null);
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+
+  const handleArchivoSeleccionado = async (e) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    setProcesandoOCR(true);
+    setErrorOCR('');
+    try {
+      const token = getAccessToken();
+      const formData = new FormData();
+      formData.append('archivo', archivo);
+      const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+      const resp = await fetch(`${BASE}/rendiciones/${rendicionId}/comprobantes/ocr`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+        credentials: 'include',
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al leer el comprobante');
+      }
+      const datos = await resp.json();
+      setForm(p => ({
+        ...p,
+        descripcion: datos.descripcion || p.descripcion,
+        proveedor: datos.proveedor || p.proveedor,
+        numero_comprobante: datos.numero_comprobante || p.numero_comprobante,
+        fecha: datos.fecha || p.fecha,
+        moneda: datos.moneda || p.moneda,
+        monto_neto: datos.monto_neto ?? p.monto_neto,
+        iva: datos.iva ?? p.iva,
+        iibb: datos.iibb ?? p.iibb,
+        archivo_url: datos.archivo_url || p.archivo_url,
+      }));
+    } catch (err) {
+      setErrorOCR(err.message);
+    } finally {
+      setProcesandoOCR(false);
+    }
+  };
 
   const totalPreview = Number(form.monto_neto || 0) + Number(form.iva || 0) + Number(form.iibb || 0);
 
