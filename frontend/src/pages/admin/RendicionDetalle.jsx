@@ -100,9 +100,37 @@ function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, gua
     });
   };
 
-  return (
+return (
     <form onSubmit={handleSubmit} noValidate>
-<Campo label="Descripción *" error={errores.descripcion}>
+      <div style={{
+        border: '2px dashed #c7d2fe', borderRadius: '10px', padding: '16px',
+        marginBottom: '20px', background: '#f8faff', textAlign: 'center',
+      }}>
+        <input
+          ref={inputArchivoRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+          onChange={handleArchivoSeleccionado} style={{ display: 'none' }}
+        />
+        {procesandoOCR ? (
+          <p style={{ margin: 0, fontSize: '13px', color: AZUL }}>🔍 Leyendo el comprobante…</p>
+        ) : form.archivo_url ? (
+          <div>
+            <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#1b5e20' }}>✓ Comprobante cargado y leído</p>
+            <Boton type="button" variante="secundario" style={{ fontSize: '12px', padding: '5px 12px' }}
+              onClick={() => inputArchivoRef.current?.click()}>Cambiar archivo</Boton>
+          </div>
+        ) : (
+          <div>
+            <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#666' }}>
+              📎 Subí una foto o PDF de la factura para autocompletar los datos
+            </p>
+            <Boton type="button" variante="secundario" style={{ fontSize: '12px', padding: '5px 12px' }}
+              onClick={() => inputArchivoRef.current?.click()}>Seleccionar archivo</Boton>
+          </div>
+        )}
+        {errorOCR && <p style={{ color: '#b91c1c', fontSize: '12px', margin: '8px 0 0' }}>{errorOCR}</p>}
+      </div>
+
+      <Campo label="Descripción *" error={errores.descripcion}>
         <Input value={form.descripcion} onChange={set('descripcion')} placeholder="Ej: Cerramientos y Estructuras - Certificado Obra" autoFocus />
       </Campo>
 <Campo label="Proveedor">
