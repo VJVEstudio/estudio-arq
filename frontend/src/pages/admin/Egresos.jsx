@@ -322,7 +322,7 @@ export default function Egresos() {
         </Modal>
       )}
       {modal && modal !== 'crear' && !modal.eliminar && (
-        <Modal titulo={`Editar egreso — ${fmtF(modal.fecha)}`} onCerrar={cerrarModal} ancho={680}>
+        <Modal titulo={`Editar egreso — ${fmtFecha(modal.fecha)}`} onCerrar={cerrarModal} ancho={680}>
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
           <FormEgreso inicial={modal} proyectos={proyectos} socios={socios} destinatarios={destinatarios}
             onNuevoDestinatario={crearDestinatario} onGuardar={handleGuardar} onCancelar={cerrarModal}
@@ -334,7 +334,7 @@ export default function Egresos() {
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
           <p style={{ fontSize: '14px', marginBottom: '8px' }}>¿Eliminar este egreso?</p>
           <p style={{ fontSize: '14px', color: '#666', marginBottom: '24px' }}>
-            <strong>{fmt(modal.egreso.monto, modal.egreso.moneda)}</strong> — {modal.egreso.destinatario_nombre} — {fmtF(modal.egreso.fecha)}
+            <strong>{fmt(modal.egreso.monto, modal.egreso.moneda)}</strong> — {modal.egreso.destinatario_nombre} — {fmtFecha(modal.egreso.fecha)}
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
             <Boton variante="secundario" onClick={cerrarModal}>Cancelar</Boton>
