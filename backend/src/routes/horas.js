@@ -22,7 +22,9 @@ router.get('/', async (req, res) => {
   if (proyecto_id) { params.push(proyecto_id); condiciones.push(`h.proyecto_id = $${params.length}`); }
   if (desde)       { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
   if (hasta)       { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
-  const camposCosto = esAdmin ? ', h.tarifa_aplicada, h.costo_total, h.liquidada' : '';
+  const camposCosto = esAdmin
+    ? ', h.tarifa_aplicada, h.costo_total, h.liquidada'
+    : ', h.tarifa_aplicada, h.costo_total';
   const { rows } = await query(
     `SELECT h.id, h.fecha, h.horas, h.descripcion_tarea, h.created_at,
             h.dibujante_id, d.nombre AS dibujante_nombre,
