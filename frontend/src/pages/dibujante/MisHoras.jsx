@@ -124,6 +124,10 @@ export default function MisHoras() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const totalHoras = horas.reduce((s, h) => s + Number(h.horas), 0);
+  const totalRegistros = horas.length;
+  const tarifaHora = horas.length > 0 ? Number(horas[0].tarifa_aplicada) : 0;
+  const totalPesos = horas.reduce((s, h) => s + Number(h.costo_total || 0), 0);
+  const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
 
   const handleGuardar = async (datos) => {
@@ -154,11 +158,25 @@ export default function MisHoras() {
 
   return (
     <div style={{ padding: '32px', maxWidth: '1000px' }}>
-      <EncabezadoSeccion
+<EncabezadoSeccion
         titulo="Mis horas"
         subtitulo={`${totalHoras.toFixed(1)} horas cargadas en total`}
         accion={<Boton onClick={() => setModal('crear')}>+ Cargar horas</Boton>}
       />
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+        {[
+          { label: 'Horas totales',   valor: `${totalHoras.toFixed(1)} h`,  color: AZUL_DIBUJANTE },
+          { label: 'Registros',        valor: totalRegistros,                color: '#0d47a1' },
+          { label: 'Precio por hora',  valor: fmt(tarifaHora),               color: '#1b5e20' },
+          { label: 'Total en pesos',   valor: fmt(totalPesos),               color: '#b71c1c' },
+        ].map(t => (
+          <div key={t.label} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 20px' }}>
+            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</p>
+            <p style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: t.color }}>{t.valor}</p>
+          </div>
+        ))}
+      </div>
       <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
       {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
       : error ? <AlertaError mensaje={error} />
