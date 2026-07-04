@@ -16,14 +16,16 @@ const NAV = [
     { to: '/admin/ingresos', label: 'Ingresos', icono: '↑' },
     { to: '/admin/egresos',  label: 'Egresos',  icono: '↓' },
     { to: '/admin/balance',  label: 'Balance',  icono: '⇄' },
-    { to: '/admin/rendiciones', label: 'Rendiciones', icono: '📋' },
-  ]},
+      ]},
   { grupo: 'Equipo', items: [
     { to: '/admin/dibujantes', label: 'Dibujantes', icono: '✏' },
     { to: '/admin/horas',      label: 'Horas',      icono: '⏱' },
   ]},
-  { grupo: 'Reportes', items: [
+{ grupo: 'Reportes', items: [
     { to: '/admin/reportes', label: 'Reporte general', icono: '📊' },
+  ]},
+  { grupo: 'Obras', items: [
+    { to: '/admin/rendiciones', label: 'Rendiciones', icono: '📋' },
   ]},
 ];
 
