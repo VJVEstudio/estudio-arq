@@ -306,14 +306,12 @@ export default function Dibujantes() {
       )}
       {modalCAC && (
         <Modal titulo="Ajuste CAC masivo — todos los dibujantes" onCerrar={() => setModalCAC(false)} ancho={480}>
-          <p style={{ fontSize: '14px', color: '#666', marginTop: 0 }}>
-            Este ajuste se aplicará a <strong>todos los dibujantes activos</strong> simultáneamente.
-          </p>
-          <form onSubmit={handleAjusteMasivo}>
-            <Campo label="Índice CAC (coeficiente)">
-              <Input type="number" min="0" step="0.0001" value={formCAC.indice_cac}
-                onChange={e => setFormCAC(p => ({ ...p, indice_cac: e.target.value }))} placeholder="Ej: 1.12 (= +12%)" autoFocus />
-            </Campo>
+<p style={{ fontSize: '14px', color: '#666', marginTop: 0 }}>
+                Este ajuste se aplicará a todos los dibujantes activos. Ingresá el porcentaje de aumento.
+              </p>
+              <Campo label="% de aumento (CAC)">
+                <Input type="number" min="0" step="0.01" value={formCAC.indice_cac} onChange={e => setFormCAC(p => ({ ...p, indice_cac: e.target.value }))} placeholder="Ej: 2.4 (= +2.4%)" />
+              </Campo>
             <Campo label="Motivo">
               <Input value={formCAC.motivo} onChange={e => setFormCAC(p => ({ ...p, motivo: e.target.value }))} placeholder="Ej: Actualización julio 2026" />
             </Campo>
