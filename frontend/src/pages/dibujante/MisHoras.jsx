@@ -15,6 +15,7 @@ function formatearFechaDibujante(valorFecha) {
 }
 
 const AZUL_DIBUJANTE = '#1a2744';
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 function FormHoras({ inicial = {}, proyectos, onGuardar, onCancelar, guardando }) {
   const [form, setForm] = useState({
@@ -123,11 +124,37 @@ export default function MisHoras() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  const totalHoras = horas.reduce((s, h) => s + Number(h.horas), 0);
-  const totalRegistros = horas.length;
+  const [modoFecha, setModoFecha] = useState('rango');
+  const hoy = new Date();
+  const [mesSeleccionado, setMesSeleccionado] = useState(
+    `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
+  );
+  const [filtroDesde, setFiltroDesde] = useState('');
+  const [filtroHasta, setFiltroHasta] = useState('');
+
+  const horasFiltradas = (() => {
+    let desde = filtroDesde;
+    let hasta = filtroHasta;
+    if (modoFecha === 'mes' && mesSeleccionado) {
+      const [anio, mes] = mesSeleccionado.split('-').map(Number);
+      desde = `${anio}-${String(mes).padStart(2, '0')}-01`;
+      const ultimoDia = new Date(anio, mes, 0).getDate();
+      hasta = `${anio}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+    }
+    return horas.filter(h => {
+      const fecha = String(h.fecha).slice(0, 10);
+      if (desde && fecha < desde) return false;
+      if (hasta && fecha > hasta) return false;
+      return true;
+    });
+  })();
+
+  const totalHoras = horasFiltradas.reduce((s, h) => s + Number(h.horas), 0);
+  const totalRegistros = horasFiltradas.length;
   const tarifaHora = horas.length > 0 ? Number(horas[0].tarifa_aplicada) : 0;
-  const totalPesos = horas.reduce((s, h) => s + Number(h.costo_total || 0), 0);
+  const totalPesos = horasFiltradas.reduce((s, h) => s + Number(h.costo_total || 0), 0);
   const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+  const hayFiltros = filtroDesde || filtroHasta || modoFecha === 'mes';
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
 
   const handleGuardar = async (datos) => {
@@ -177,7 +204,47 @@ export default function MisHoras() {
           </div>
         ))}
       </div>
-      <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
+  <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
+
+      {/* Filtros de fecha */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
+          {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
+            <button key={opt.id} onClick={() => setModoFecha(opt.id)} style={{
+              padding: '5px 10px', fontSize: '12px', borderRadius: '6px', border: 'none',
+              background: modoFecha === opt.id ? '#fff' : 'transparent',
+              boxShadow: modoFecha === opt.id ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+              cursor: 'pointer', fontFamily: 'inherit',
+              color: modoFecha === opt.id ? AZUL_DIBUJANTE : '#666',
+              fontWeight: modoFecha === opt.id ? 600 : 400,
+            }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {modoFecha === 'rango' ? (
+          <>
+            <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
+            <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
+          </>
+        ) : (
+          <input type="month" value={mesSeleccionado} onChange={e => setMesSeleccionado(e.target.value)}
+            style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
+        )}
+
+        {hayFiltros && (
+          <button onClick={() => { setFiltroDesde(''); setFiltroHasta(''); setModoFecha('rango'); }} style={{
+            padding: '5px 12px', fontSize: '12px', borderRadius: '6px', border: '1px solid #d0d0d0',
+            background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: '#666',
+          }}>
+            Limpiar
+          </button>
+        )}
+      </div>
+
       {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
       : error ? <AlertaError mensaje={error} />
       : (
@@ -186,8 +253,7 @@ export default function MisHoras() {
           <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
             <Tabla
               columnas={['Fecha', 'Proyecto', 'Horas', 'Descripción', '']}
-              datos={horas}
-              vacio="Todavía no cargaste horas. ¡Empezá ahora!"
+datos={horasFiltradas}              vacio="Todavía no cargaste horas. ¡Empezá ahora!"
               renderFila={(h) => (
                 <Fila key={h.id}>
                   <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{formatearFechaDibujante(h.fecha)}</Celda>
