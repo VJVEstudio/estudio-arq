@@ -151,15 +151,15 @@ const [formInfo,   setFormInfo]   = useState({ nombre: dibujante.nombre, fecha_i
       {tab === 'cac' && (
         <div>
           <form onSubmit={handleAjusteCAC} style={{ marginBottom: '28px' }}>
-            <p style={{ fontSize: '14px', color: '#666', marginTop: 0 }}>
-              Ingresá el coeficiente del índice CAC. La tarifa actual se multiplicará por ese valor.
+<p style={{ fontSize: '14px', color: '#666', marginTop: 0 }}>
+              Ingresá el porcentaje de aumento. La tarifa actual se incrementará en ese porcentaje.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <Campo label="Índice CAC (coeficiente)">
-                <Input type="number" min="0" step="0.0001" value={formCAC.indice_cac} onChange={setC('indice_cac')} placeholder="Ej: 1.12 (= +12%)" />
+              <Campo label="% de aumento (CAC)">
+                <Input type="number" min="0" step="0.01" value={formCAC.indice_cac} onChange={setC('indice_cac')} placeholder="Ej: 2.4 (= +2.4%)" />
               </Campo>
               <Campo label="Nueva tarifa (vista previa)">
-                <Input readOnly value={formCAC.indice_cac > 0 ? fmt(dibujante.tarifa_hora_base * Number(formCAC.indice_cac)) : '—'} style={{ background: '#f5f5f5', cursor: 'default' }} />
+                <Input readOnly value={formCAC.indice_cac > 0 ? fmt(dibujante.tarifa_hora_base * (1 + Number(formCAC.indice_cac) / 100)) : '—'} style={{ background: '#f5f5f5', cursor: 'default' }} />
               </Campo>
             </div>
             <Campo label="Motivo (opcional)">
