@@ -304,20 +304,21 @@ export default function Dibujantes() {
           <PanelDetalle dibujante={modal} onActualizar={handleActualizar} onCerrar={() => setModal(null)} />
         </Modal>
       )}
-      {modalCAC && (
-        <Modal titulo="Ajuste CAC masivo — todos los dibujantes" onCerrar={() => setModalCAC(false)} ancho={480}>
-<p style={{ fontSize: '14px', color: '#666', marginTop: 0 }}>
-                Este ajuste se aplicará a todos los dibujantes activos. Ingresá el porcentaje de aumento.
-              </p>
-              <Campo label="% de aumento (CAC)">
-                <Input type="number" min="0" step="0.01" value={formCAC.indice_cac} onChange={e => setFormCAC(p => ({ ...p, indice_cac: e.target.value }))} placeholder="Ej: 2.4 (= +2.4%)" />
-              </Campo>
-            <Campo label="Motivo">
+{modalCAC && (
+        <Modal titulo="Ajuste CAC masivo" onCerrar={() => { setModalCAC(false); setFormCAC({ indice_cac: '', motivo: '' }); setErrorAccion(''); }} ancho={480}>
+          <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
+          <form onSubmit={handleAjusteMasivo}>
+            <p style={{ fontSize: '14px', color: '#666', marginTop: 0 }}>
+              Este ajuste se aplicará a todos los dibujantes activos. Ingresá el porcentaje de aumento.
+            </p>
+            <Campo label="% de aumento (CAC)">
+              <Input type="number" min="0" step="0.01" value={formCAC.indice_cac} onChange={e => setFormCAC(p => ({ ...p, indice_cac: e.target.value }))} placeholder="Ej: 2.4 (= +2.4%)" />
+            </Campo>
+            <Campo label="Motivo (opcional)">
               <Input value={formCAC.motivo} onChange={e => setFormCAC(p => ({ ...p, motivo: e.target.value }))} placeholder="Ej: Actualización julio 2026" />
             </Campo>
-            <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
-              <Boton type="button" variante="secundario" onClick={() => setModalCAC(false)}>Cancelar</Boton>
+              <Boton type="button" variante="secundario" onClick={() => { setModalCAC(false); setFormCAC({ indice_cac: '', motivo: '' }); }}>Cancelar</Boton>
               <Boton type="submit" disabled={guardando || !formCAC.indice_cac}>{guardando ? 'Aplicando…' : 'Aplicar a todos'}</Boton>
             </div>
           </form>
