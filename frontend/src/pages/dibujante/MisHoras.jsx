@@ -206,8 +206,7 @@ export default function MisHoras() {
       </div>
   <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
 
-      {/* Filtros de fecha */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+
         <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
           {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
             <button key={opt.id} onClick={() => setModoFecha(opt.id)} style={{
@@ -250,6 +249,8 @@ export default function MisHoras() {
       : (
         <>
           <ResumenProyectos horas={horas} />
+      {/* Filtros de fecha */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>          
           <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
             <Tabla
               columnas={['Fecha', 'Proyecto', 'Horas', 'Descripción', '']}
