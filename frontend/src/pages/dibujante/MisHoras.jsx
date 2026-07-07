@@ -5,6 +5,8 @@ import {
   Modal, Campo, Input, Select, Textarea, AlertaError,
 } from '../../components/ui';
 
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
 function formatearFechaDibujante(valorFecha) {
   if (!valorFecha) return '—';
   const soloFecha = String(valorFecha).slice(0, 10);
@@ -15,7 +17,6 @@ function formatearFechaDibujante(valorFecha) {
 }
 
 const AZUL_DIBUJANTE = '#1a2744';
-const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 function FormHoras({ inicial = {}, proyectos, onGuardar, onCancelar, guardando }) {
   const [form, setForm] = useState({
@@ -112,6 +113,15 @@ export default function MisHoras() {
   const [eliminando,  setEliminando]  = useState(false);
   const [errorAccion, setErrorAccion] = useState('');
 
+  // Filtros de fecha
+  const [modoFecha, setModoFecha] = useState('rango');
+  const hoy = new Date();
+  const [mesSeleccionado, setMesSeleccionado] = useState(
+    `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
+  );
+  const [filtroDesde, setFiltroDesde] = useState('');
+  const [filtroHasta, setFiltroHasta] = useState('');
+
   const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
@@ -123,14 +133,6 @@ export default function MisHoras() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
-
-  const [modoFecha, setModoFecha] = useState('rango');
-  const hoy = new Date();
-  const [mesSeleccionado, setMesSeleccionado] = useState(
-    `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
-  );
-  const [filtroDesde, setFiltroDesde] = useState('');
-  const [filtroHasta, setFiltroHasta] = useState('');
 
   const horasFiltradas = (() => {
     let desde = filtroDesde;
@@ -149,12 +151,13 @@ export default function MisHoras() {
     });
   })();
 
+  const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
   const totalHoras = horasFiltradas.reduce((s, h) => s + Number(h.horas), 0);
   const totalRegistros = horasFiltradas.length;
   const tarifaHora = horas.length > 0 ? Number(horas[0].tarifa_aplicada) : 0;
   const totalPesos = horasFiltradas.reduce((s, h) => s + Number(h.costo_total || 0), 0);
-  const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
   const hayFiltros = filtroDesde || filtroHasta || modoFecha === 'mes';
+
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
 
   const handleGuardar = async (datos) => {
@@ -185,18 +188,19 @@ export default function MisHoras() {
 
   return (
     <div style={{ padding: '32px', maxWidth: '1000px' }}>
-<EncabezadoSeccion
+      <EncabezadoSeccion
         titulo="Mis horas"
         subtitulo={`${totalHoras.toFixed(1)} horas cargadas en total`}
         accion={<Boton onClick={() => setModal('crear')}>+ Cargar horas</Boton>}
       />
 
+      {/* Tarjetas resumen */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '24px' }}>
         {[
-          { label: 'Horas totales',   valor: `${totalHoras.toFixed(1)} h`,  color: AZUL_DIBUJANTE },
-          { label: 'Registros',        valor: totalRegistros,                color: '#0d47a1' },
-          { label: 'Precio por hora',  valor: fmt(tarifaHora),               color: '#1b5e20' },
-          { label: 'Total en pesos',   valor: fmt(totalPesos),               color: '#b71c1c' },
+          { label: 'Horas totales',  valor: `${totalHoras.toFixed(1)} h`, color: AZUL_DIBUJANTE },
+          { label: 'Registros',      valor: totalRegistros,               color: '#0d47a1' },
+          { label: 'Precio por hora', valor: fmt(tarifaHora),             color: '#1b5e20' },
+          { label: 'Total en pesos', valor: fmt(totalPesos),              color: '#b71c1c' },
         ].map(t => (
           <div key={t.label} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 20px' }}>
             <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</p>
@@ -204,57 +208,59 @@ export default function MisHoras() {
           </div>
         ))}
       </div>
-  <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
 
-
-        <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
-          {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
-            <button key={opt.id} onClick={() => setModoFecha(opt.id)} style={{
-              padding: '5px 10px', fontSize: '12px', borderRadius: '6px', border: 'none',
-              background: modoFecha === opt.id ? '#fff' : 'transparent',
-              boxShadow: modoFecha === opt.id ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
-              cursor: 'pointer', fontFamily: 'inherit',
-              color: modoFecha === opt.id ? AZUL_DIBUJANTE : '#666',
-              fontWeight: modoFecha === opt.id ? 600 : 400,
-            }}>
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {modoFecha === 'rango' ? (
-          <>
-            <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)}
-              style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
-            <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)}
-              style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
-          </>
-        ) : (
-          <input type="month" value={mesSeleccionado} onChange={e => setMesSeleccionado(e.target.value)}
-            style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
-        )}
-
-        {hayFiltros && (
-          <button onClick={() => { setFiltroDesde(''); setFiltroHasta(''); setModoFecha('rango'); }} style={{
-            padding: '5px 12px', fontSize: '12px', borderRadius: '6px', border: '1px solid #d0d0d0',
-            background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: '#666',
-          }}>
-            Limpiar
-          </button>
-        )}
-      </div>
+      <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
 
       {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
       : error ? <AlertaError mensaje={error} />
       : (
         <>
+          {/* Resumen por proyecto — usa TODAS las horas sin filtro */}
           <ResumenProyectos horas={horas} />
-      {/* Filtros de fecha */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>          
+
+          {/* Filtros de fecha — antes de la tabla */}
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
+              {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
+                <button key={opt.id} onClick={() => setModoFecha(opt.id)} style={{
+                  padding: '5px 10px', fontSize: '12px', borderRadius: '6px', border: 'none',
+                  background: modoFecha === opt.id ? '#fff' : 'transparent',
+                  boxShadow: modoFecha === opt.id ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  color: modoFecha === opt.id ? AZUL_DIBUJANTE : '#666',
+                  fontWeight: modoFecha === opt.id ? 600 : 400,
+                }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {modoFecha === 'rango' ? (
+              <>
+                <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)}
+                  style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
+                <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)}
+                  style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
+              </>
+            ) : (
+              <input type="month" value={mesSeleccionado} onChange={e => setMesSeleccionado(e.target.value)}
+                style={{ padding: '6px 10px', border: '1px solid #d0d0d0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit' }} />
+            )}
+            {hayFiltros && (
+              <button onClick={() => { setFiltroDesde(''); setFiltroHasta(''); setModoFecha('rango'); }} style={{
+                padding: '5px 12px', fontSize: '12px', borderRadius: '6px', border: '1px solid #d0d0d0',
+                background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', color: '#666',
+              }}>
+                Limpiar
+              </button>
+            )}
+          </div>
+
+          {/* Tabla de horas filtradas */}
           <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
             <Tabla
               columnas={['Fecha', 'Proyecto', 'Horas', 'Descripción', '']}
-datos={horasFiltradas}              vacio="Todavía no cargaste horas. ¡Empezá ahora!"
+              datos={horasFiltradas}
+              vacio="No hay registros para el período seleccionado."
               renderFila={(h) => (
                 <Fila key={h.id}>
                   <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{formatearFechaDibujante(h.fecha)}</Celda>
@@ -289,7 +295,7 @@ datos={horasFiltradas}              vacio="Todavía no cargaste horas. ¡Empezá
       {confirmElim && (
         <Modal titulo="Eliminar registro" onCerrar={() => setConfirmElim(null)} ancho={420}>
           <p style={{ fontSize: '14px', marginBottom: '8px' }}>
-            ¿Eliminás este registro de <strong>{Number(confirmElim.horas).toFixed(1)} horas</strong> del {formatearFechaDibujante(confirmElim.fecha)}?
+            ¿Eliminar este registro de <strong>{Number(confirmElim.horas).toFixed(1)} horas</strong> del {formatearFechaDibujante(confirmElim.fecha)}?
           </p>
           <p style={{ fontSize: '13px', color: '#666', marginBottom: '24px' }}>Proyecto: {confirmElim.proyecto_nombre}</p>
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
