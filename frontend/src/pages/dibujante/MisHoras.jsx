@@ -101,15 +101,15 @@ function ResumenProyectos({ horas }) {
 }
 
 export default function MisHoras() {
-  const [horas,         setHoras]         = useState([]);
-  const [proyectos,     setProyectos]     = useState([]);
-  const [cargando,      setCargando]      = useState(true);
-  const [error,         setError]         = useState(null);
-  const [modal,         setModal]         = useState(null);
-  const [confirmElim,   setConfirmElim]   = useState(null);
-  const [guardando,     setGuardando]     = useState(false);
-  const [eliminando,    setEliminando]    = useState(false);
-  const [errorAccion,   setErrorAccion]   = useState('');
+  const [horas,       setHoras]       = useState([]);
+  const [proyectos,   setProyectos]   = useState([]);
+  const [cargando,    setCargando]    = useState(true);
+  const [error,       setError]       = useState(null);
+  const [modal,       setModal]       = useState(null);
+  const [confirmElim, setConfirmElim] = useState(null);
+  const [guardando,   setGuardando]   = useState(false);
+  const [eliminando,  setEliminando]  = useState(false);
+  const [errorAccion, setErrorAccion] = useState('');
 
   const [modoFecha,       setModoFecha]       = useState('rango');
   const hoy = new Date();
@@ -123,11 +123,11 @@ export default function MisHoras() {
     setCargando(true);
     setError(null);
     try {
-      const [h, p, l] = await Promise.all([
+      const [h, p] = await Promise.all([
         get('/horas'),
         get('/proyectos?todos=true'),
       ]);
-      setHoras(h); setProyectos(p); setLiquidaciones(l);
+      setHoras(h); setProyectos(p);
     } catch (err) { setError(err.message); }
     finally { setCargando(false); }
   }, []);
@@ -194,7 +194,6 @@ export default function MisHoras() {
         accion={<Boton onClick={() => setModal('crear')}>+ Cargar horas</Boton>}
       />
 
-      {/* Tarjetas resumen */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '24px' }}>
         {[
           { label: 'Horas totales',   valor: `${totalHoras.toFixed(1)} h`, color: AZUL_DIBUJANTE },
@@ -215,11 +214,8 @@ export default function MisHoras() {
       : error ? <AlertaError mensaje={error} />
       : (
         <div>
-          {/* Resumen por proyecto */}
           <ResumenProyectos horas={horas} />
 
-
-          {/* Filtros de fecha */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
               {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
@@ -256,7 +252,6 @@ export default function MisHoras() {
             )}
           </div>
 
-          {/* Tabla de horas filtradas */}
           <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
             <Tabla
               columnas={['Fecha', 'Proyecto', 'Horas', 'Descripción', '']}
