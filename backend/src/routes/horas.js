@@ -389,4 +389,22 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   doc.end();
 });
 
+// GET /api/horas/mis-liquidaciones — solo para dibujantes
+router.get('/mis-liquidaciones', async (req, res) => {
+  const { rows: dibujante } = await query(
+    `SELECT id FROM dibujantes WHERE usuario_id = $1`, [req.usuario.id]
+  );
+  if (!dibujante[0]) return res.json([]);
+
+  const { rows } = await query(
+    `SELECT l.id, l.mes, l.anio, l.horas_totales, l.monto_total,
+            l.fecha_desde, l.fecha_hasta, l.tarifa_aplicada, l.estado,
+            l.created_at
+     FROM liquidaciones_dibujantes l
+     WHERE l.dibujante_id = $1
+     ORDER BY l.fecha_hasta DESC`,
+    [dibujante[0].id]
+  );
+  res.json(rows);
+});
 module.exports = router;
