@@ -41,9 +41,12 @@ function Sidebar({ colapsado, onToggle }) {
         display: 'flex', alignItems: 'center',
         justifyContent: colapsado ? 'center' : 'space-between', minHeight: 64,
       }}>
-        {!colapsado && (
+{colapsado ? (
+          <img src="/LogoVJVinvert.jpg" alt="VJV" style={{ width: '44px', borderRadius: '4px', display: 'block' }} />
+        ) : (
           <div>
-<img src="/LogoVJVinvert.jpg" alt="VJV" style={{ width: '104px', marginBottom: '8px', borderRadius: '4px', display: 'block' }} />            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>VJV Arquitectos</p>
+            <img src="/LogoVJVinvert.jpg" alt="VJV" style={{ width: '104px', marginBottom: '8px', borderRadius: '4px', display: 'block' }} />
+            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: 'white' }}>VJV Arquitectos</p>
             <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>Panel de gestión</p>
           </div>
         )}
