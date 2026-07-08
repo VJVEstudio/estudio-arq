@@ -157,7 +157,7 @@ export default function MisHoras() {
   const tarifaHora = horas.length > 0 ? Number(horas[0].tarifa_aplicada) : 0;
   const totalHoras = horasFiltradas.reduce((s, h) => s + Number(h.horas), 0);
   const totalRegistros = horasFiltradas.length;
-  const totalPesos = horasFiltradas.reduce((s, h) => s + Number(h.horas) * tarifaHora, 0);
+  const totalPesos = Math.round(horasFiltradas.reduce((s, h) => s + Number(h.horas) * tarifaHora, 0) * 100) / 100;
   const hayFiltros = filtroDesde || filtroHasta || modoFecha === 'mes';
 
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
@@ -220,10 +220,14 @@ export default function MisHoras() {
           {/* Resumen por proyecto */}
           <ResumenProyectos horas={horas} />
 
-          {/* Mis liquidaciones */}
-          {liquidaciones.length > 0 && (
-            <div style={{ marginBottom: '28px' }}>
-              <p style={{ fontWeight: 500, fontSize: '15px', marginBottom: '12px' }}>Mis liquidaciones</p>
+          {/* Mis liquidaciones — siempre visible */}
+          <div style={{ marginBottom: '28px' }}>
+            <p style={{ fontWeight: 500, fontSize: '15px', marginBottom: '12px' }}>Mis liquidaciones</p>
+            {liquidaciones.length === 0 ? (
+              <p style={{ color: '#999', fontSize: '13px', padding: '16px', background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px' }}>
+                Todavía no tenés liquidaciones registradas.
+              </p>
+            ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {liquidaciones.map(l => (
                   <div key={l.id} style={{
@@ -255,8 +259,8 @@ export default function MisHoras() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Filtros de fecha */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
