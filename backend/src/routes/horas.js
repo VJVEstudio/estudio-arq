@@ -183,8 +183,7 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   const { rows } = await query(
     `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
-            SUM(h.horas) AS horas_totales, SUM(h.costo_total) AS costo_total
-     FROM horas_dibujantes h
+SUM(h.horas) AS horas_totales, SUM(h.horas * d.tarifa_hora_base) AS costo_total     FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
      WHERE ${condiciones.join(' AND ')}
