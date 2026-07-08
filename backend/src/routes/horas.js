@@ -137,12 +137,18 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
       egresosCreados.push(egreso);
     }
 
+// Calcular fecha desde y hasta del período liquidado
+    const fechaDesde = horas.reduce((min, h) => h.fecha < min ? h.fecha : min, horas[0].fecha);
+    const fechaHasta = horas.reduce((max, h) => h.fecha > max ? h.fecha : max, horas[0].fecha);
+    const tarifaAplicada = horas.length > 0 ? Number(horas[0].costo_total) / Number(horas[0].horas) : 0;
+
     const { rows: [liquidacion] } = await client.query(`
       INSERT INTO liquidaciones_dibujantes
-        (dibujante_id, mes, anio, horas_totales, monto_total, egreso_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
+        (dibujante_id, mes, anio, horas_totales, monto_total, egreso_id, fecha_desde, fecha_hasta, tarifa_aplicada)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
-    `, [dibujante_id, mes, anio, horas_totales, monto_total, egresosCreados[0]?.id || null]);
+    `, [dibujante_id, mes, anio, horas_totales, monto_total, egresosCreados[0]?.id || null,
+        fechaDesde, fechaHasta, tarifaAplicada]);
 
     const ids = horas.map(h => h.id);
     await client.query(`
