@@ -5,8 +5,6 @@ import {
   Modal, Campo, Input, Select, Textarea, AlertaError,
 } from '../../components/ui';
 
-const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-
 function formatearFechaDibujante(valorFecha) {
   if (!valorFecha) return '—';
   const soloFecha = String(valorFecha).slice(0, 10);
@@ -103,19 +101,18 @@ function ResumenProyectos({ horas }) {
 }
 
 export default function MisHoras() {
-const [horas,          setHoras]          = useState([]);
-  const [proyectos,      setProyectos]      = useState([]);
-  const [liquidaciones,  setLiquidaciones]  = useState([]);
-  const [cargando,       setCargando]       = useState(true);
-  const [error,          setError]          = useState(null);
-  const [modal,       setModal]       = useState(null);
-  const [confirmElim, setConfirmElim] = useState(null);
-  const [guardando,   setGuardando]   = useState(false);
-  const [eliminando,  setEliminando]  = useState(false);
-  const [errorAccion, setErrorAccion] = useState('');
+  const [horas,         setHoras]         = useState([]);
+  const [proyectos,     setProyectos]     = useState([]);
+  const [liquidaciones, setLiquidaciones] = useState([]);
+  const [cargando,      setCargando]      = useState(true);
+  const [error,         setError]         = useState(null);
+  const [modal,         setModal]         = useState(null);
+  const [confirmElim,   setConfirmElim]   = useState(null);
+  const [guardando,     setGuardando]     = useState(false);
+  const [eliminando,    setEliminando]    = useState(false);
+  const [errorAccion,   setErrorAccion]   = useState('');
 
-  // Filtros de fecha
-  const [modoFecha, setModoFecha] = useState('rango');
+  const [modoFecha,       setModoFecha]       = useState('rango');
   const hoy = new Date();
   const [mesSeleccionado, setMesSeleccionado] = useState(
     `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
@@ -123,7 +120,7 @@ const [horas,          setHoras]          = useState([]);
   const [filtroDesde, setFiltroDesde] = useState('');
   const [filtroHasta, setFiltroHasta] = useState('');
 
-const cargar = useCallback(async () => {
+  const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
     try {
@@ -136,6 +133,7 @@ const cargar = useCallback(async () => {
     } catch (err) { setError(err.message); }
     finally { setCargando(false); }
   }, []);
+
   useEffect(() => { cargar(); }, [cargar]);
 
   const horasFiltradas = (() => {
@@ -156,10 +154,10 @@ const cargar = useCallback(async () => {
   })();
 
   const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+  const tarifaHora = horas.length > 0 ? Number(horas[0].tarifa_aplicada) : 0;
   const totalHoras = horasFiltradas.reduce((s, h) => s + Number(h.horas), 0);
   const totalRegistros = horasFiltradas.length;
-  const tarifaHora = horas.length > 0 ? Number(horas[0].tarifa_aplicada) : 0;
-  const totalPesos = horasFiltradas.reduce((s, h) => s + Number(h.costo_total || 0), 0);
+  const totalPesos = horasFiltradas.reduce((s, h) => s + Number(h.horas) * tarifaHora, 0);
   const hayFiltros = filtroDesde || filtroHasta || modoFecha === 'mes';
 
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
@@ -201,10 +199,10 @@ const cargar = useCallback(async () => {
       {/* Tarjetas resumen */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '24px' }}>
         {[
-          { label: 'Horas totales',  valor: `${totalHoras.toFixed(1)} h`, color: AZUL_DIBUJANTE },
-          { label: 'Registros',      valor: totalRegistros,               color: '#0d47a1' },
-          { label: 'Precio por hora', valor: fmt(tarifaHora),             color: '#1b5e20' },
-          { label: 'Total en pesos', valor: fmt(totalPesos),              color: '#b71c1c' },
+          { label: 'Horas totales',   valor: `${totalHoras.toFixed(1)} h`, color: AZUL_DIBUJANTE },
+          { label: 'Registros',       valor: totalRegistros,               color: '#0d47a1' },
+          { label: 'Precio por hora', valor: fmt(tarifaHora),              color: '#1b5e20' },
+          { label: 'Total en pesos',  valor: fmt(totalPesos),              color: '#b71c1c' },
         ].map(t => (
           <div key={t.label} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 20px' }}>
             <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</p>
@@ -218,11 +216,49 @@ const cargar = useCallback(async () => {
       {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
       : error ? <AlertaError mensaje={error} />
       : (
-        <>
-          {/* Resumen por proyecto — usa TODAS las horas sin filtro */}
+        <div>
+          {/* Resumen por proyecto */}
           <ResumenProyectos horas={horas} />
 
-          {/* Filtros de fecha — antes de la tabla */}
+          {/* Mis liquidaciones */}
+          {liquidaciones.length > 0 && (
+            <div style={{ marginBottom: '28px' }}>
+              <p style={{ fontWeight: 500, fontSize: '15px', marginBottom: '12px' }}>Mis liquidaciones</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {liquidaciones.map(l => (
+                  <div key={l.id} style={{
+                    background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px',
+                    padding: '14px 18px', display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', flexWrap: 'wrap', gap: '12px',
+                  }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 500, fontSize: '14px' }}>
+                        {formatearFechaDibujante(l.fecha_desde)} → {formatearFechaDibujante(l.fecha_hasta)}
+                      </p>
+                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#666' }}>
+                        {Number(l.horas_totales).toFixed(1)} h × {fmt(l.tarifa_aplicada)}/h
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: AZUL_DIBUJANTE }}>
+                        {fmt(l.monto_total)}
+                      </p>
+                      <span style={{
+                        display: 'inline-block', marginTop: '4px',
+                        padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500,
+                        background: l.estado === 'pagado' ? '#e8f5e9' : '#fff8e1',
+                        color: l.estado === 'pagado' ? '#1b5e20' : '#f57f17',
+                      }}>
+                        {l.estado === 'pagado' ? 'Pagado' : 'Pendiente de pago'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Filtros de fecha */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
               {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
@@ -259,50 +295,6 @@ const cargar = useCallback(async () => {
             )}
           </div>
 
-          {/* Mis liquidaciones */}
-          {liquidaciones.length > 0 && (
-            <div style={{ marginBottom: '28px' }}>
-              <p style={{ fontWeight: 500, fontSize: '15px', marginBottom: '12px' }}>Mis liquidaciones</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {liquidaciones.map(l => {
-                  const desde = formatearFechaDibujante(l.fecha_desde);
-                  const hasta = formatearFechaDibujante(l.fecha_hasta);
-                  return (
-                    <div key={l.id} style={{
-                      background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px',
-                      padding: '14px 18px', display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'center', flexWrap: 'wrap', gap: '12px',
-                    }}>
-                      <div>
-                        <p style={{ margin: 0, fontWeight: 500, fontSize: '14px' }}>
-                          {desde} → {hasta}
-                        </p>
-                        <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#666' }}>
-                          {Number(l.horas_totales).toFixed(1)} h × {fmt(l.tarifa_aplicada)}/h
-                        </p>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: AZUL_DIBUJANTE }}>
-                          {fmt(l.monto_total)}
-                        </p>
-                        <span style={{
-                          display: 'inline-block', marginTop: '4px',
-                          padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500,
-                          background: l.estado === 'pagado' ? '#e8f5e9' : '#fff8e1',
-                          color: l.estado === 'pagado' ? '#1b5e20' : '#f57f17',
-                        }}>
-                          {l.estado === 'pagado' ? 'Pagado' : 'Pendiente de pago'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Tabla de horas filtradas */}
-          <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           {/* Tabla de horas filtradas */}
           <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
             <Tabla
@@ -329,7 +321,7 @@ const cargar = useCallback(async () => {
               )}
             />
           </div>
-        </>
+        </div>
       )}
 
       {modal && (
