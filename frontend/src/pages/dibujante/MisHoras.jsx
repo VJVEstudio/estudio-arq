@@ -103,7 +103,6 @@ function ResumenProyectos({ horas }) {
 export default function MisHoras() {
   const [horas,         setHoras]         = useState([]);
   const [proyectos,     setProyectos]     = useState([]);
-  const [liquidaciones, setLiquidaciones] = useState([]);
   const [cargando,      setCargando]      = useState(true);
   const [error,         setError]         = useState(null);
   const [modal,         setModal]         = useState(null);
@@ -127,7 +126,6 @@ export default function MisHoras() {
       const [h, p, l] = await Promise.all([
         get('/horas'),
         get('/proyectos?todos=true'),
-        get('/horas/mis-liquidaciones'),
       ]);
       setHoras(h); setProyectos(p); setLiquidaciones(l);
     } catch (err) { setError(err.message); }
@@ -220,47 +218,6 @@ export default function MisHoras() {
           {/* Resumen por proyecto */}
           <ResumenProyectos horas={horas} />
 
-          {/* Mis liquidaciones — siempre visible */}
-          <div style={{ marginBottom: '28px' }}>
-            <p style={{ fontWeight: 500, fontSize: '15px', marginBottom: '12px' }}>Mis liquidaciones</p>
-            {liquidaciones.length === 0 ? (
-              <p style={{ color: '#999', fontSize: '13px', padding: '16px', background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px' }}>
-                Todavía no tenés liquidaciones registradas.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {liquidaciones.map(l => (
-                  <div key={l.id} style={{
-                    background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px',
-                    padding: '14px 18px', display: 'flex', justifyContent: 'space-between',
-                    alignItems: 'center', flexWrap: 'wrap', gap: '12px',
-                  }}>
-                    <div>
-                      <p style={{ margin: 0, fontWeight: 500, fontSize: '14px' }}>
-                        {formatearFechaDibujante(l.fecha_desde)} → {formatearFechaDibujante(l.fecha_hasta)}
-                      </p>
-                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#666' }}>
-                        {Number(l.horas_totales).toFixed(1)} h × {fmt(l.tarifa_aplicada)}/h
-                      </p>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: AZUL_DIBUJANTE }}>
-                        {fmt(l.monto_total)}
-                      </p>
-                      <span style={{
-                        display: 'inline-block', marginTop: '4px',
-                        padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500,
-                        background: l.estado === 'pagado' ? '#e8f5e9' : '#fff8e1',
-                        color: l.estado === 'pagado' ? '#1b5e20' : '#f57f17',
-                      }}>
-                        {l.estado === 'pagado' ? 'Pagado' : 'Pendiente de pago'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Filtros de fecha */}
           <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
