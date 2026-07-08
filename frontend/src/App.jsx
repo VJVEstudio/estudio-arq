@@ -19,6 +19,7 @@ import ReporteGeneral  from './pages/admin/ReporteGeneral';
 import ReporteProyecto from './pages/admin/ReporteProyecto';
 
 import MisHoras from './pages/dibujante/MisHoras';
+import MisLiquidaciones from './pages/dibujante/MisLiquidaciones';
 
 export default function App() {
   return (
@@ -45,7 +46,8 @@ export default function App() {
 
           <Route element={<ProtectedRoute rol="dibujante" />}>
             <Route element={<LayoutDibujante />}>
-              <Route path="/dibujante/horas" element={<MisHoras />} />
+<Route path="/dibujante/horas"         element={<MisHoras />} />
+              <Route path="/dibujante/liquidaciones"  element={<MisLiquidaciones />} />
               <Route path="/dibujante" element={<Navigate to="/dibujante/horas" replace />} />
             </Route>
           </Route>
