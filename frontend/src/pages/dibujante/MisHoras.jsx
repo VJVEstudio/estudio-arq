@@ -103,10 +103,11 @@ function ResumenProyectos({ horas }) {
 }
 
 export default function MisHoras() {
-  const [horas,       setHoras]       = useState([]);
-  const [proyectos,   setProyectos]   = useState([]);
-  const [cargando,    setCargando]    = useState(true);
-  const [error,       setError]       = useState(null);
+const [horas,          setHoras]          = useState([]);
+  const [proyectos,      setProyectos]      = useState([]);
+  const [liquidaciones,  setLiquidaciones]  = useState([]);
+  const [cargando,       setCargando]       = useState(true);
+  const [error,          setError]          = useState(null);
   const [modal,       setModal]       = useState(null);
   const [confirmElim, setConfirmElim] = useState(null);
   const [guardando,   setGuardando]   = useState(false);
