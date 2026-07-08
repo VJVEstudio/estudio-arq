@@ -24,7 +24,7 @@ export default function LayoutDibujante() {
         </div>
 
         <nav style={{ flex: 1, padding: '16px 0' }}>
-          <NavLink to="/dibujante/horas"
+<NavLink to="/dibujante/horas"
             style={({ isActive }) => ({
               display: 'flex', alignItems: 'center', gap: '10px',
               padding: '9px 20px', margin: '1px 8px', borderRadius: '8px',
@@ -33,6 +33,16 @@ export default function LayoutDibujante() {
               textDecoration: 'none', fontSize: '14px',
             })}>
             <span>⏱</span> Mis horas
+          </NavLink>
+          <NavLink to="/dibujante/liquidaciones"
+            style={({ isActive }) => ({
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '9px 20px', margin: '1px 8px', borderRadius: '8px',
+              color: isActive ? 'white' : 'rgba(255,255,255,0.6)',
+              background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+              textDecoration: 'none', fontSize: '14px',
+            })}>
+            <span>💰</span> Mis liquidaciones
           </NavLink>
         </nav>
 
