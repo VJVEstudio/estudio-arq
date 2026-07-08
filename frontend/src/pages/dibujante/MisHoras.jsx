@@ -123,16 +123,19 @@ const [horas,          setHoras]          = useState([]);
   const [filtroDesde, setFiltroDesde] = useState('');
   const [filtroHasta, setFiltroHasta] = useState('');
 
-  const cargar = useCallback(async () => {
+const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
     try {
-      const [h, p] = await Promise.all([get('/horas'), get('/proyectos?todos=true')]);
-      setHoras(h); setProyectos(p);
+      const [h, p, l] = await Promise.all([
+        get('/horas'),
+        get('/proyectos?todos=true'),
+        get('/horas/mis-liquidaciones'),
+      ]);
+      setHoras(h); setProyectos(p); setLiquidaciones(l);
     } catch (err) { setError(err.message); }
     finally { setCargando(false); }
   }, []);
-
   useEffect(() => { cargar(); }, [cargar]);
 
   const horasFiltradas = (() => {
@@ -256,6 +259,50 @@ const [horas,          setHoras]          = useState([]);
             )}
           </div>
 
+          {/* Mis liquidaciones */}
+          {liquidaciones.length > 0 && (
+            <div style={{ marginBottom: '28px' }}>
+              <p style={{ fontWeight: 500, fontSize: '15px', marginBottom: '12px' }}>Mis liquidaciones</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {liquidaciones.map(l => {
+                  const desde = formatearFechaDibujante(l.fecha_desde);
+                  const hasta = formatearFechaDibujante(l.fecha_hasta);
+                  return (
+                    <div key={l.id} style={{
+                      background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px',
+                      padding: '14px 18px', display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'center', flexWrap: 'wrap', gap: '12px',
+                    }}>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 500, fontSize: '14px' }}>
+                          {desde} → {hasta}
+                        </p>
+                        <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#666' }}>
+                          {Number(l.horas_totales).toFixed(1)} h × {fmt(l.tarifa_aplicada)}/h
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: AZUL_DIBUJANTE }}>
+                          {fmt(l.monto_total)}
+                        </p>
+                        <span style={{
+                          display: 'inline-block', marginTop: '4px',
+                          padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 500,
+                          background: l.estado === 'pagado' ? '#e8f5e9' : '#fff8e1',
+                          color: l.estado === 'pagado' ? '#1b5e20' : '#f57f17',
+                        }}>
+                          {l.estado === 'pagado' ? 'Pagado' : 'Pendiente de pago'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tabla de horas filtradas */}
+          <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           {/* Tabla de horas filtradas */}
           <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
             <Tabla
