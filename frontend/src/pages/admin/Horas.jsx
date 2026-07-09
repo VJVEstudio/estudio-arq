@@ -282,6 +282,7 @@ const exportar = (formato) => {
     Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) params.set(k, v); });
     const token = getAccessToken();
     if (token) params.set('token', token);
+    console.log('Exportando con params:', params.toString()); // ← AGREGAR ESTO
     window.open(`${BASE}/horas/exportar/${formato}?${params}`, '_blank');
   };
   const hayFiltrosActivos = filtros.dibujante_id || filtros.proyecto_id || filtros.desde || filtros.hasta || modoFecha === 'mes';
