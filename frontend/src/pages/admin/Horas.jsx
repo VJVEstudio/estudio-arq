@@ -6,8 +6,7 @@ import { get, post, getAccessToken } from '../../lib/api';import {
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
-const fmt  = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
-const fmtF = (f) => {
+const fmt  = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;const fmtF = (f) => {
   if (!f) return '—';
   const fecha = typeof f === 'string' ? f.split('T')[0] : f;
   const d = new Date(fecha + 'T00:00:00');
