@@ -253,8 +253,7 @@ export default function Horas() {
         get('/proyectos'),
         get('/socios'),
         get('/destinatarios'),
-        get('/horas/pendientes'),
-      ]);
+get(`/horas/pendientes?${new URLSearchParams(Object.fromEntries(Object.entries(filtrosEfectivos).filter(([,v]) => v)))}`),      ]);
       setHoras(h); setResumen(r); setDibujantes(d); setProyectos(p);
       setSocios(s); setDestinatarios(dest); setPendientes(pend);
     } catch (err) { setError(err.message); }
