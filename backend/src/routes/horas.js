@@ -74,7 +74,7 @@ router.get('/pendientes', auth.soloAdmin, async (req, res) => {
       EXTRACT(MONTH FROM h.fecha) AS numero_mes,
       EXTRACT(YEAR FROM h.fecha) AS anio,
       SUM(h.horas) AS horas_totales,
-      SUM(h.costo_total) AS monto_total,
+      SUM(h.horas * d.tarifa_hora_base) AS monto_total,
       COUNT(h.id) AS registros
     FROM horas_dibujantes h
     JOIN dibujantes d ON d.id = h.dibujante_id
