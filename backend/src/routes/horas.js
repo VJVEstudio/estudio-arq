@@ -66,6 +66,7 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
 });
 
 router.get('/pendientes', auth.soloAdmin, async (req, res) => {
+  console.log('PENDIENTES query params:', req.query);
   const { desde, hasta, dibujante_id } = req.query;
   const condiciones = ['h.liquidada = FALSE'];
   const params = [];
