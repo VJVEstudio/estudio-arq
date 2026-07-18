@@ -337,14 +337,12 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
     `, [dibujante_id, mes, anio, horas_totales, monto_total, egresosCreados[0]?.id || null,
         fechaDesde, fechaHasta, tarifaActual]);
 
-    // Actualizar el costo_total de cada hora con la tarifa actual
-    for (const h of horas) {
-      const costoActual = Math.round(Number(h.horas) * tarifaActual * 100) / 100;
-      await client.query(
-        `UPDATE horas_dibujantes SET liquidada = TRUE, liquidacion_id = $1, costo_total = $2 WHERE id = $3`,
-        [liquidacion.id, costoActual, h.id]
-      );
-    }
+const ids = horas.map(h => h.id);
+    await client.query(`
+      UPDATE horas_dibujantes
+      SET liquidada = TRUE, liquidacion_id = $1
+      WHERE id = ANY($2)
+    `, [liquidacion.id, ids]);
 
     await client.query('COMMIT');
     res.status(201).json({ liquidacion, egresos: egresosCreados, horas_totales, monto_total });
