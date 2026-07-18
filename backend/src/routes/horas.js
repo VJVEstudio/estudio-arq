@@ -66,6 +66,13 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
 });
 
 router.get('/pendientes', auth.soloAdmin, async (req, res) => {
+  const { desde, hasta, dibujante_id } = req.query;
+  const condiciones = ['h.liquidada = FALSE'];
+  const params = [];
+  if (desde)       { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
+  if (hasta)       { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
+  if (dibujante_id){ params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
+
   const { rows } = await query(`
     SELECT
       d.id AS dibujante_id,
@@ -78,11 +85,13 @@ router.get('/pendientes', auth.soloAdmin, async (req, res) => {
       COUNT(h.id) AS registros
     FROM horas_dibujantes h
     JOIN dibujantes d ON d.id = h.dibujante_id
-    WHERE h.liquidada = FALSE
+    WHERE ${condiciones.join(' AND ')}
     GROUP BY d.id, d.nombre, DATE_TRUNC('month', h.fecha),
              EXTRACT(MONTH FROM h.fecha), EXTRACT(YEAR FROM h.fecha)
     ORDER BY mes DESC, d.nombre ASC
-  `);
+  `, params);
+  res.json(rows);
+});
   res.json(rows);
 });
 
