@@ -52,7 +52,6 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
             COUNT(h.id) AS registros,
             SUM(h.horas) AS horas_totales,
-            SUM(h.costo_total) AS costo_total_historico,
             SUM(h.horas * d.tarifa_hora_base) AS costo_total
      FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
@@ -66,13 +65,13 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
 });
 
 router.get('/pendientes', auth.soloAdmin, async (req, res) => {
-  console.log('PENDIENTES query params:', req.query);
   const { desde, hasta, dibujante_id } = req.query;
+  console.log('PENDIENTES query params:', req.query);
   const condiciones = ['h.liquidada = FALSE'];
   const params = [];
-  if (desde)       { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
-  if (hasta)       { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
-  if (dibujante_id){ params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
+  if (desde)        { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
+  if (hasta)        { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
+  if (dibujante_id) { params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
 
   const { rows } = await query(`
     SELECT
@@ -93,10 +92,7 @@ router.get('/pendientes', auth.soloAdmin, async (req, res) => {
   `, params);
   res.json(rows);
 });
-  res.json(rows);
-});
 
-// GET /api/horas/mis-liquidaciones — solo para dibujantes
 router.get('/mis-liquidaciones', async (req, res) => {
   const { rows: dibujante } = await query(
     `SELECT id FROM dibujantes WHERE usuario_id = $1`, [req.usuario.id]
@@ -193,7 +189,8 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   const { rows } = await query(
     `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
-SUM(h.horas) AS horas_totales, SUM(h.horas * d.tarifa_hora_base) AS costo_total     FROM horas_dibujantes h
+            SUM(h.horas) AS horas_totales, SUM(h.horas * d.tarifa_hora_base) AS costo_total
+     FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
      WHERE ${condiciones.join(' AND ')}
@@ -225,7 +222,7 @@ SUM(h.horas) AS horas_totales, SUM(h.horas * d.tarifa_hora_base) AS costo_total 
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
   doc.pipe(res);
 
-  const moneyFmt = (n) => `$ ${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+  const moneyFmt = (n) => `$ ${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   doc.fontSize(16).fillColor('#1a2744').text('Horas trabajadas — VJV Arquitectos', { align: 'center' });
   doc.fontSize(9).fillColor('#666').text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, { align: 'center' });
@@ -295,16 +292,23 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
     }
 
     const horas_totales = horas.reduce((s, h) => s + Number(h.horas), 0);
-    const monto_total   = horas.reduce((s, h) => s + Number(h.costo_total), 0);
+
+    // Obtener tarifa actual del dibujante
+    const { rows: dibRows } = await client.query(
+      `SELECT tarifa_hora_base FROM dibujantes WHERE id = $1`, [dibujante_id]
+    );
+    const tarifaActual = Number(dibRows[0]?.tarifa_hora_base || 0);
+    const monto_total = Math.round(horas_totales * tarifaActual * 100) / 100;
 
     const porProyecto = {};
     horas.forEach(h => {
       if (!porProyecto[h.proyecto_id]) porProyecto[h.proyecto_id] = 0;
-      porProyecto[h.proyecto_id] += Number(h.costo_total);
+      porProyecto[h.proyecto_id] += Number(h.horas);
     });
 
     const egresosCreados = [];
-    for (const [proyecto_id_actual, monto_proyecto] of Object.entries(porProyecto)) {
+    for (const [proyecto_id_actual, horas_proyecto] of Object.entries(porProyecto)) {
+      const monto_proyecto = Math.round(horas_proyecto * tarifaActual * 100) / 100;
       const { rows: [egreso] } = await client.query(`
         INSERT INTO egresos
           (destinatario_id, proyecto_id, categoria, monto, moneda, pagado_por_estudio, socio_id, fecha, descripcion)
@@ -313,7 +317,7 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
       `, [
         destinatario_id,
         proyecto_id_actual,
-        Math.round(monto_proyecto * 100) / 100,
+        monto_proyecto,
         pagado_por_estudio ?? true,
         pagado_por_estudio ? null : socio_id,
         `Honorarios dibujante — ${mes}/${anio}`,
@@ -322,10 +326,8 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
       egresosCreados.push(egreso);
     }
 
-    // Calcular fecha desde y hasta del período liquidado
     const fechaDesde = horas.reduce((min, h) => h.fecha < min ? h.fecha : min, horas[0].fecha);
     const fechaHasta = horas.reduce((max, h) => h.fecha > max ? h.fecha : max, horas[0].fecha);
-    const tarifaAplicada = horas.length > 0 ? Math.round(Number(horas[0].costo_total) / Number(horas[0].horas) * 100) / 100 : 0;
 
     const { rows: [liquidacion] } = await client.query(`
       INSERT INTO liquidaciones_dibujantes
@@ -333,14 +335,16 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
     `, [dibujante_id, mes, anio, horas_totales, monto_total, egresosCreados[0]?.id || null,
-        fechaDesde, fechaHasta, tarifaAplicada]);
+        fechaDesde, fechaHasta, tarifaActual]);
 
-    const ids = horas.map(h => h.id);
-    await client.query(`
-      UPDATE horas_dibujantes
-      SET liquidada = TRUE, liquidacion_id = $1
-      WHERE id = ANY($2)
-    `, [liquidacion.id, ids]);
+    // Actualizar el costo_total de cada hora con la tarifa actual
+    for (const h of horas) {
+      const costoActual = Math.round(Number(h.horas) * tarifaActual * 100) / 100;
+      await client.query(
+        `UPDATE horas_dibujantes SET liquidada = TRUE, liquidacion_id = $1, costo_total = $2 WHERE id = $3`,
+        [liquidacion.id, costoActual, h.id]
+      );
+    }
 
     await client.query('COMMIT');
     res.status(201).json({ liquidacion, egresos: egresosCreados, horas_totales, monto_total });
