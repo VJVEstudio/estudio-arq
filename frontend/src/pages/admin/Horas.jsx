@@ -240,12 +240,14 @@ export default function Horas() {
     return filtros;
   })();
 
-  const cargar = useCallback(async () => {
+const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
     try {
       const params = new URLSearchParams();
       Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) params.set(k, v); });
+      const pendientesParams = new URLSearchParams();
+      Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) pendientesParams.set(k, v); });
       const [h, r, d, p, s, dest, pend] = await Promise.all([
         get(`/horas?${params}`),
         get(`/horas/resumen?${params}`),
@@ -253,7 +255,8 @@ export default function Horas() {
         get('/proyectos'),
         get('/socios'),
         get('/destinatarios'),
-get(`/horas/pendientes?${new URLSearchParams(Object.fromEntries(Object.entries(filtrosEfectivos).filter(([,v]) => v)))}`),      ]);
+        get(`/horas/pendientes?${pendientesParams}`),
+      ]);
       setHoras(h); setResumen(r); setDibujantes(d); setProyectos(p);
       setSocios(s); setDestinatarios(dest); setPendientes(pend);
     } catch (err) { setError(err.message); }
