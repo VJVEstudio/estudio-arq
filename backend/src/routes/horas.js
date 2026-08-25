@@ -293,12 +293,14 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
 
     const horas_totales = horas.reduce((s, h) => s + Number(h.horas), 0);
 
-    // Obtener tarifa actual del dibujante
+        // Obtener tarifa actual y monotributo del dibujante
     const { rows: dibRows } = await client.query(
-      `SELECT tarifa_hora_base FROM dibujantes WHERE id = $1`, [dibujante_id]
+      `SELECT tarifa_hora_base, monotributo_activo, monotributo_monto FROM dibujantes WHERE id = $1`, [dibujante_id]
     );
     const tarifaActual = Number(dibRows[0]?.tarifa_hora_base || 0);
-    const monto_total = Math.round(horas_totales * tarifaActual * 100) / 100;
+    const monotributoMonto = dibRows[0]?.monotributo_activo ? Number(dibRows[0]?.monotributo_monto || 0) : 0;
+    const monto_horas = Math.round(horas_totales * tarifaActual * 100) / 100;
+    const monto_total = Math.round((monto_horas + monotributoMonto) * 100) / 100;
 
     const porProyecto = {};
     horas.forEach(h => {
