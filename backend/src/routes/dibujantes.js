@@ -140,10 +140,14 @@ router.put('/:id', auth.soloAdmin, async (req, res) => {
       }
     }
 
-    const { rows } = await client.query(
-      `UPDATE dibujantes SET nombre=$1, fecha_inicio=$2, tarifa_hora_base=COALESCE($3, tarifa_hora_base), updated_at=NOW()
-       WHERE id=$4 RETURNING *`,
-      [nombre.trim(), fecha_inicio, tarifa_hora_base ?? null, req.params.id]
+        const { rows } = await client.query(
+      `UPDATE dibujantes SET nombre=$1, fecha_inicio=$2, tarifa_hora_base=COALESCE($3, tarifa_hora_base),
+       monotributo_activo=COALESCE($4, monotributo_activo), monotributo_monto=COALESCE($5, monotributo_monto),
+       updated_at=NOW()
+       WHERE id=$6 RETURNING *`,
+      [nombre.trim(), fecha_inicio, tarifa_hora_base ?? null,
+       req.body.monotributo_activo ?? null, req.body.monotributo_monto ?? null,
+       req.params.id]
     );
     if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Dibujante no encontrado' }); }
     if (activo !== undefined) {
