@@ -331,13 +331,13 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
     const fechaDesde = horas.reduce((min, h) => h.fecha < min ? h.fecha : min, horas[0].fecha);
     const fechaHasta = horas.reduce((max, h) => h.fecha > max ? h.fecha : max, horas[0].fecha);
 
-    const { rows: [liquidacion] } = await client.query(`
+        const { rows: [liquidacion] } = await client.query(`
       INSERT INTO liquidaciones_dibujantes
-        (dibujante_id, mes, anio, horas_totales, monto_total, egreso_id, fecha_desde, fecha_hasta, tarifa_aplicada)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        (dibujante_id, mes, anio, horas_totales, monto_total, egreso_id, fecha_desde, fecha_hasta, tarifa_aplicada, monotributo_monto)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [dibujante_id, mes, anio, horas_totales, monto_total, egresosCreados[0]?.id || null,
-        fechaDesde, fechaHasta, tarifaActual]);
+        fechaDesde, fechaHasta, tarifaActual, monotributoMonto]);
 
 const ids = horas.map(h => h.id);
     await client.query(`
