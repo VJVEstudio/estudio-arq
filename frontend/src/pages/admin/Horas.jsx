@@ -162,7 +162,13 @@ function PanelLiquidacion({ pendientes, socios, destinatarios, onLiquidar, carga
           <p style={{ margin: '0 0 12px', fontWeight: 500, fontSize: '14px' }}>
             Liquidar: {seleccion.dibujante_nombre} — {MESES[Number(seleccion.numero_mes) - 1]} {seleccion.anio}
           </p>
-          <p style={{ margin: '0 0 16px', fontSize: '22px', fontWeight: 700, color: '#b71c1c' }}>{fmt(seleccion.monto_total)}</p>
+                    <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#666' }}>
+            Horas: {fmt(seleccion.monto_total)}
+            {seleccion.monotributo > 0 && ` + Monotributo: ${fmt(seleccion.monotributo)}`}
+          </p>
+          <p style={{ margin: '0 0 16px', fontSize: '22px', fontWeight: 700, color: '#b71c1c' }}>
+            {fmt(seleccion.monto_total + (seleccion.monotributo || 0))}
+          </p>
 
           <Campo label="Destinatario (dibujante) *">
             <Select value={destinatario_id} onChange={e => setDestinatarioId(e.target.value)}>
