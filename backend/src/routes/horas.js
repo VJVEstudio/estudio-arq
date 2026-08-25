@@ -74,7 +74,7 @@ router.get('/pendientes', auth.soloAdmin, async (req, res) => {
   if (dibujante_id) { params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
 
   const { rows } = await query(`
-    SELECT
+        SELECT
       d.id AS dibujante_id,
       d.nombre AS dibujante_nombre,
       DATE_TRUNC('month', h.fecha) AS mes,
@@ -82,7 +82,8 @@ router.get('/pendientes', auth.soloAdmin, async (req, res) => {
       EXTRACT(YEAR FROM h.fecha) AS anio,
       SUM(h.horas) AS horas_totales,
       SUM(h.horas * d.tarifa_hora_base) AS monto_total,
-      COUNT(h.id) AS registros
+      COUNT(h.id) AS registros,
+      CASE WHEN d.monotributo_activo THEN d.monotributo_monto ELSE 0 END AS monotributo
     FROM horas_dibujantes h
     JOIN dibujantes d ON d.id = h.dibujante_id
     WHERE ${condiciones.join(' AND ')}
