@@ -52,7 +52,8 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
             COUNT(h.id) AS registros,
             SUM(h.horas) AS horas_totales,
-            SUM(h.horas * d.tarifa_hora_base) AS costo_total
+            SUM(h.horas * d.tarifa_hora_base) AS costo_total,
+            MAX(CASE WHEN d.monotributo_activo THEN d.monotributo_monto ELSE 0 END) AS monotributo
      FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
