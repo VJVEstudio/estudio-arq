@@ -71,7 +71,8 @@ function TablaResumen({ resumen }) {
               </div>
               <div style={{ display: 'flex', gap: '24px', fontSize: '14px' }}>
                 <span><strong>{d.horas_total.toFixed(1)}</strong> h totales</span>
-                <span style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(d.costo_total)}</span>
+                {Number(d.monotributo) > 0 && <span style={{ fontSize: '12px', color: '#0d47a1' }}>+ Mono: {fmt(d.monotributo)}</span>}
+                <span style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(Number(d.costo_total) + Number(d.monotributo || 0))}</span>
               </div>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
