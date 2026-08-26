@@ -138,10 +138,29 @@ const [formInfo,   setFormInfo]   = useState({ nombre: dibujante.nombre, fecha_i
             />
           </Campo>
           <Campo label="Fecha de inicio"><Input type="date" value={formInfo.fecha_inicio} onChange={setI('fecha_inicio')} /></Campo>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '20px', cursor: 'pointer' }}>
+                   <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '16px', cursor: 'pointer' }}>
             <input type="checkbox" checked={formInfo.activo} onChange={setI('activo')} />
             Usuario activo (puede iniciar sesión)
           </label>
+          <div style={{ background: '#f8f9fa', border: '1px solid #e0e0e0', borderRadius: '10px', padding: '14px 16px', marginBottom: '20px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '12px', cursor: 'pointer' }}>
+              <input type="checkbox"
+                checked={formInfo.monotributo_activo ?? dibujante.monotributo_activo ?? false}
+                onChange={e => setFormInfo(p => ({ ...p, monotributo_activo: e.target.checked }))}
+              />
+              <span style={{ fontWeight: 500 }}>Cobra monotributo</span>
+            </label>
+            {(formInfo.monotributo_activo ?? dibujante.monotributo_activo) && (
+              <Campo label="Monto mensual del monotributo ($)">
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={formInfo.monotributo_monto ?? dibujante.monotributo_monto ?? ''}
+                  onChange={setI('monotributo_monto')}
+                  placeholder="Ej: 45000"
+                />
+              </Campo>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
             <Boton type="button" variante="secundario" onClick={onCerrar}>Cerrar</Boton>
             <Boton type="submit" disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</Boton>
