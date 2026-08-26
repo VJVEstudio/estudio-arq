@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { get, post, getAccessToken } from '../../lib/api';import {
+import { get, post, getAccessToken } from '../../lib/api';
+import {
   EncabezadoSeccion, Tabla, Fila, Celda,
   Select, Input, AlertaError, Boton, Modal, Campo,
 } from '../../components/ui';
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
-const fmt  = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;const fmtF = (f) => {
+const fmt  = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtF = (f) => {
   if (!f) return '—';
   const fecha = typeof f === 'string' ? f.split('T')[0] : f;
   const d = new Date(fecha + 'T00:00:00');
@@ -132,6 +134,10 @@ function PanelLiquidacion({ pendientes, socios, destinatarios, onLiquidar, carga
     );
   }
 
+  const montoTotal = seleccion
+    ? Number(seleccion.monto_total) + Number(seleccion.monotributo || 0)
+    : 0;
+
   return (
     <div>
       <p style={{ fontWeight: 500, fontSize: '15px', margin: '0 0 14px' }}>Horas pendientes de liquidación:</p>
@@ -149,9 +155,14 @@ function PanelLiquidacion({ pendientes, socios, destinatarios, onLiquidar, carga
                 {MESES[Number(p.numero_mes) - 1]} {p.anio}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: '20px', fontSize: '14px' }}>
+            <div style={{ display: 'flex', gap: '20px', fontSize: '14px', alignItems: 'center' }}>
               <span>{Number(p.horas_totales).toFixed(1)} h</span>
-              <span style={{ fontWeight: 700, color: '#b71c1c' }}>{fmt(p.monto_total)}</span>
+              {Number(p.monotributo) > 0 && (
+                <span style={{ fontSize: '12px', color: '#666' }}>+ Mono: {fmt(p.monotributo)}</span>
+              )}
+              <span style={{ fontWeight: 700, color: '#b71c1c' }}>
+                {fmt(Number(p.monto_total) + Number(p.monotributo || 0))}
+              </span>
             </div>
           </div>
         ))}
@@ -159,16 +170,20 @@ function PanelLiquidacion({ pendientes, socios, destinatarios, onLiquidar, carga
 
       {seleccion && (
         <div style={{ background: '#f8f9fa', border: '1px solid #e0e0e0', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
-          <p style={{ margin: '0 0 12px', fontWeight: 500, fontSize: '14px' }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 500, fontSize: '14px' }}>
             Liquidar: {seleccion.dibujante_nombre} — {MESES[Number(seleccion.numero_mes) - 1]} {seleccion.anio}
           </p>
-                    <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#666' }}>
-            Horas: {fmt(seleccion.monto_total)}
-            {seleccion.monotributo > 0 && ` + Monotributo: ${fmt(seleccion.monotributo)}`}
-          </p>
-          <p style={{ margin: '0 0 16px', fontSize: '22px', fontWeight: 700, color: '#b71c1c' }}>
-            {fmt(seleccion.monto_total + (seleccion.monotributo || 0))}
-          </p>
+          <div style={{ margin: '0 0 16px' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+              Horas: <strong>{fmt(seleccion.monto_total)}</strong>
+              {Number(seleccion.monotributo) > 0 && (
+                <span> + Monotributo: <strong>{fmt(seleccion.monotributo)}</strong></span>
+              )}
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '22px', fontWeight: 700, color: '#b71c1c' }}>
+              {fmt(montoTotal)}
+            </p>
+          </div>
 
           <Campo label="Destinatario (dibujante) *">
             <Select value={destinatario_id} onChange={e => setDestinatarioId(e.target.value)}>
@@ -225,16 +240,14 @@ export default function Horas() {
   const [cargandoPendientes, setCargandoPendientes] = useState(true);
   const [error,      setError]      = useState(null);
 
-  // Filtros: dibujante, proyecto, y modo de fecha (rango exacto o mes)
-  const [modoFecha, setModoFecha] = useState('rango'); // 'rango' | 'mes'
+  const [modoFecha, setModoFecha] = useState('rango');
   const hoy = new Date();
   const [mesSeleccionado, setMesSeleccionado] = useState(
     `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
   );
   const [filtros, setFiltros] = useState({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' });
-  const [vista, setVista] = useState('resumen'); // Vista por defecto: "Por dibujante"
+  const [vista, setVista] = useState('resumen');
 
-  // Calcular desde/hasta efectivos según el modo de fecha
   const filtrosEfectivos = (() => {
     if (modoFecha === 'mes' && mesSeleccionado) {
       const [anio, mes] = mesSeleccionado.split('-').map(Number);
@@ -246,7 +259,7 @@ export default function Horas() {
     return filtros;
   })();
 
-const cargar = useCallback(async () => {
+  const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
     try {
@@ -284,14 +297,14 @@ const cargar = useCallback(async () => {
     setModoFecha('rango');
   };
 
-const exportar = (formato) => {
+  const exportar = (formato) => {
     const params = new URLSearchParams();
     Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) params.set(k, v); });
     const token = getAccessToken();
     if (token) params.set('token', token);
-    console.log('Exportando con params:', params.toString()); // ← AGREGAR ESTO
     window.open(`${BASE}/horas/exportar/${formato}?${params}`, '_blank');
   };
+
   const hayFiltrosActivos = filtros.dibujante_id || filtros.proyecto_id || filtros.desde || filtros.hasta || modoFecha === 'mes';
 
   return (
@@ -318,7 +331,6 @@ const exportar = (formato) => {
           {proyectos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </Select>
 
-        {/* Toggle entre filtro por rango o por mes */}
         <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
           {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
             <button key={opt.id} onClick={() => setModoFecha(opt.id)} style={{
