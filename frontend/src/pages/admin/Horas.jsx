@@ -85,6 +85,14 @@ function TablaResumen({ resumen }) {
                     <td style={{ padding: '8px 16px', textAlign: 'right', fontWeight: 500 }}>{fmt(p.costo_total)}</td>
                   </tr>
                 ))}
+                {Number(d.monotributo || 0) > 0 && (
+                  <tr style={{ borderBottom: '1px solid #e0e0e0', background: '#f0f4ff' }}>
+                    <td style={{ padding: '8px 16px', color: '#0d47a1', fontWeight: 500 }}>Monotributo</td>
+                    <td style={{ padding: '8px 16px', color: '#999', fontSize: '12px' }}>mensual</td>
+                    <td style={{ padding: '8px 16px' }}></td>
+                    <td style={{ padding: '8px 16px', textAlign: 'right', fontWeight: 600, color: '#0d47a1' }}>{fmt(d.monotributo)}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
