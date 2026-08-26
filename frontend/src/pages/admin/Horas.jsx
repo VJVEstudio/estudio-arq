@@ -53,8 +53,7 @@ function TablaResumen({ resumen }) {
   const porDibujante = {};
   resumen.forEach(r => {
     if (!porDibujante[r.dibujante_id]) {
-      porDibujante[r.dibujante_id] = { nombre: r.dibujante_nombre, tarifa_actual: r.tarifa_actual, proyectos: [], horas_total: 0, costo_total: 0 };
-    }
+      porDibujante[r.dibujante_id] = { nombre: r.dibujante_nombre, tarifa_actual: r.tarifa_actual, monotributo: r.monotributo, proyectos: [], horas_total: 0, costo_total: 0 };
     porDibujante[r.dibujante_id].proyectos.push(r);
     porDibujante[r.dibujante_id].horas_total += Number(r.horas_totales);
     porDibujante[r.dibujante_id].costo_total += Number(r.costo_total);
