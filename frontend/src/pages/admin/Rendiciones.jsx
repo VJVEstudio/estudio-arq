@@ -117,6 +117,11 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
       <Campo label="Notas (opcional)">
         <Input value={form.notas} onChange={set('notas')} placeholder="Notas internas…" />
       </Campo>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '16px', cursor: 'pointer' }}>
+        <input type="checkbox" checked={form.es_honorarios}
+          onChange={e => setForm(p => ({ ...p, es_honorarios: e.target.checked }))} />
+        <span>Es rendición de honorarios (RHDT / RHP)</span>
+      </label>
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
         <Boton type="button" variante="secundario" onClick={onCancelar}>Cancelar</Boton>
         <Boton type="submit" disabled={guardando}>{guardando ? 'Creando…' : 'Crear rendición'}</Boton>
