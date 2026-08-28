@@ -326,8 +326,30 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
       {/* Distribución de honorarios */}
       <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <p style={{ fontWeight: 500, fontSize: '15px', margin: 0 }}>Distribución de honorarios</p>
-          <Boton style={{ padding: '5px 12px', fontSize: '13px' }} onClick={() => setMostrarFormSocio(true)}>+ Agregar socio</Boton>
+          <div>
+            <p style={{ fontWeight: 500, fontSize: '15px', margin: '0 0 4px' }}>Distribución de honorarios</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '120px', height: '6px', background: '#e0e0e0', borderRadius: '3px' }}>
+                <div style={{
+                  width: `${Math.min(100, honorarios.socios.reduce((s, sc) => s + Number(sc.porcentaje), 0))}%`,
+                  height: '100%', borderRadius: '3px',
+                  background: honorarios.socios.reduce((s, sc) => s + Number(sc.porcentaje), 0) > 100 ? '#b71c1c' : '#1a2744',
+                  transition: 'width 0.3s',
+                }} />
+              </div>
+              <span style={{
+                fontSize: '12px', fontWeight: 600,
+                color: honorarios.socios.reduce((s, sc) => s + Number(sc.porcentaje), 0) > 100 ? '#b71c1c' : '#666',
+              }}>
+                {honorarios.socios.reduce((s, sc) => s + Number(sc.porcentaje), 0).toFixed(2)}% asignado
+              </span>
+            </div>
+          </div>
+          <Boton style={{ padding: '5px 12px', fontSize: '13px' }}
+            onClick={() => setMostrarFormSocio(true)}
+            disabled={honorarios.socios.reduce((s, sc) => s + Number(sc.porcentaje), 0) >= 100}>
+            + Agregar socio
+          </Boton>
         </div>
 
         {mostrarFormSocio && (
