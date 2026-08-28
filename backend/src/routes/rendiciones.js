@@ -66,7 +66,7 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/rendiciones
 router.post('/', async (req, res) => {
-  const { proyecto_id, tipo, fecha, notas } = req.body;
+  const { proyecto_id, tipo, fecha, notas, es_honorarios } = req.body;
   if (!proyecto_id) return res.status(400).json({ error: 'proyecto_id es obligatorio' });
   if (!tipo?.trim()) return res.status(400).json({ error: 'El tipo es obligatorio' });
   if (!fecha) return res.status(400).json({ error: 'La fecha es obligatoria' });
