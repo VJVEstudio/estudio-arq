@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRendicion } from '../../hooks/useRendiciones';
-import { getAccessToken } from '../../lib/api';
+import { getAccessToken, get, post, put, del } from '../../lib/api';
 import {
   Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, AlertaError,
@@ -12,8 +12,9 @@ const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
-    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const fmtF = (f) => {
   if (!f) return '—';
   const fecha = typeof f === 'string' ? f.split('T')[0] : f;
@@ -22,6 +23,7 @@ const fmtF = (f) => {
   return d.toLocaleDateString('es-AR');
 };
 
+// ── Formulario de comprobante ─────────────────────────────────────────────────
 function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, guardando }) {
   const [form, setForm] = useState({
     descripcion: inicial.descripcion || '',
@@ -40,6 +42,8 @@ function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, gua
   const inputArchivoRef = useRef(null);
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
 
+  const totalPreview = Number(form.monto_neto || 0) + Number(form.iva || 0) + Number(form.iibb || 0);
+
   const handleArchivoSeleccionado = async (e) => {
     const archivo = e.target.files?.[0];
     if (!archivo) return;
@@ -49,7 +53,6 @@ function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, gua
       const token = getAccessToken();
       const formData = new FormData();
       formData.append('archivo', archivo);
-      const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
       const resp = await fetch(`${BASE}/rendiciones/${rendicionId}/comprobantes/ocr`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -80,8 +83,6 @@ function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, gua
     }
   };
 
-  const totalPreview = Number(form.monto_neto || 0) + Number(form.iva || 0) + Number(form.iibb || 0);
-
   const validar = () => {
     const errs = {};
     if (!form.descripcion.trim()) errs.descripcion = 'La descripción es obligatoria';
@@ -100,16 +101,14 @@ function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, gua
     });
   };
 
-return (
+  return (
     <form onSubmit={handleSubmit} noValidate>
       <div style={{
         border: '2px dashed #c7d2fe', borderRadius: '10px', padding: '16px',
         marginBottom: '20px', background: '#f8faff', textAlign: 'center',
       }}>
-        <input
-          ref={inputArchivoRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
-          onChange={handleArchivoSeleccionado} style={{ display: 'none' }}
-        />
+        <input ref={inputArchivoRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+          onChange={handleArchivoSeleccionado} style={{ display: 'none' }} />
         {procesandoOCR ? (
           <p style={{ margin: 0, fontSize: '13px', color: AZUL }}>🔍 Leyendo el comprobante…</p>
         ) : form.archivo_url ? (
@@ -133,7 +132,7 @@ return (
       <Campo label="Descripción *" error={errores.descripcion}>
         <Input value={form.descripcion} onChange={set('descripcion')} placeholder="Ej: Cerramientos y Estructuras - Certificado Obra" autoFocus />
       </Campo>
-<Campo label="Proveedor">
+      <Campo label="Proveedor">
         <Input value={form.proveedor} onChange={set('proveedor')} placeholder="Ej: Cerramientos y Estructuras SA" />
       </Campo>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: '16px' }}>
@@ -172,6 +171,8 @@ return (
     </form>
   );
 }
+
+// ── Rendición de Honorarios DT/HP ────────────────────────────────────────────
 function RendicionHonorarios({ rendicion, id, cargar }) {
   const navigate = useNavigate();
   const [honorarios, setHonorarios] = useState({ bases: [], socios: [] });
@@ -181,10 +182,8 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
   const [errorAccion, setErrorAccion] = useState('');
   const [formSocio, setFormSocio] = useState({ nombre: '', porcentaje: '', aplica_iva: false });
   const [mostrarFormSocio, setMostrarFormSocio] = useState(false);
-  const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
   const cargarHonorarios = async () => {
-    const { get } = await import('../../lib/api');
     const [h, r] = await Promise.all([
       get(`/rendiciones/${id}/honorarios`),
       get('/rendiciones'),
@@ -195,39 +194,25 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
 
   useEffect(() => { cargarHonorarios(); }, [id]);
 
-  const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const fmtF = (f) => {
-    if (!f) return '—';
-    const fecha = typeof f === 'string' ? f.split('T')[0] : f;
-    const d = new Date(fecha + 'T00:00:00');
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleDateString('es-AR');
-  };
-
   const totalBase = honorarios.bases.reduce((s, b) => s + Number(b.total_ars), 0);
   const honorarioTotal = totalBase * Number(pct || 0) / 100;
   const totalSocios = honorarios.socios.reduce((s, sc) => s + Number(sc.monto_total), 0);
 
   const handleAgregarBase = async (rendicion_base_id) => {
-    const { post } = await import('../../lib/api');
     try {
       await post(`/rendiciones/${id}/honorarios/base`, { rendicion_base_id });
       await cargarHonorarios();
-      await handleRecalcular();
     } catch (err) { setErrorAccion(err.message); }
   };
 
   const handleEliminarBase = async (baseId) => {
-    const { del } = await import('../../lib/api');
     try {
       await del(`/rendiciones/honorarios/base/${baseId}`);
       await cargarHonorarios();
-      await handleRecalcular();
     } catch (err) { setErrorAccion(err.message); }
   };
 
   const handleRecalcular = async () => {
-    const { put } = await import('../../lib/api');
     try {
       await put(`/rendiciones/${id}/honorarios/calcular`, { porcentaje_honorarios: Number(pct) });
       await cargarHonorarios();
@@ -236,7 +221,6 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
 
   const handleAgregarSocio = async (e) => {
     e.preventDefault();
-    const { post } = await import('../../lib/api');
     setGuardando(true);
     try {
       await post(`/rendiciones/${id}/honorarios/socios`, {
@@ -252,7 +236,6 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
   };
 
   const handleEliminarSocio = async (socioId) => {
-    const { del } = await import('../../lib/api');
     try {
       await del(`/rendiciones/honorarios/socios/${socioId}`);
       await cargarHonorarios();
@@ -282,7 +265,6 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
       {/* Rendiciones base */}
       <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
         <p style={{ fontWeight: 500, fontSize: '15px', margin: '0 0 14px' }}>Rendiciones base</p>
-
         {honorarios.bases.length === 0 ? (
           <p style={{ color: '#999', fontSize: '13px', marginBottom: '12px' }}>No hay rendiciones base agregadas todavía.</p>
         ) : (
@@ -292,7 +274,7 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
                 <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 500 }}>Rendición</th>
                 <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500 }}>Neto</th>
                 <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500 }}>Subtotal</th>
-                <th style={{ padding: '8px 12px' }}></th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -307,19 +289,126 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
                 </tr>
               ))}
               <tr style={{ background: '#f8f9fa', fontWeight: 700 }}>
+                <td colSpan={2} style={{ padding: '8px 12px' }}></td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: AZUL }}>TOTAL {fmt(totalBase)}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+        <Select value="" onChange={e => { if (e.target.value) handleAgregarBase(e.target.value); }} style={{ width: 'auto' }}>
+          <option value="">+ Agregar rendición base…</option>
+          {todasRendiciones
+            .filter(r => !honorarios.bases.find(b => b.rendicion_base_id === r.id))
+            .map(r => <option key={r.id} value={r.id}>{r.tipo}{r.numero} — {r.proyecto_nombre}</option>)
+          }
+        </Select>
+      </div>
+
+      {/* Porcentaje de honorarios */}
+      <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
+        <p style={{ fontWeight: 500, fontSize: '15px', margin: '0 0 14px' }}>Honorarios VJV</p>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <Campo label="% de honorarios">
+            <Input type="number" min="0" max="100" step="0.01" value={pct}
+              onChange={e => setPct(e.target.value)} placeholder="Ej: 7" style={{ width: '120px' }} />
+          </Campo>
+          <Boton onClick={handleRecalcular} disabled={!pct || honorarios.bases.length === 0}>Calcular</Boton>
+          {honorarioTotal > 0 && (
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              {fmt(totalBase)} × {pct}% = <strong style={{ color: AZUL, fontSize: '16px' }}>{fmt(honorarioTotal)}</strong>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Distribución de honorarios */}
+      <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <p style={{ fontWeight: 500, fontSize: '15px', margin: 0 }}>Distribución de honorarios</p>
+          <Boton style={{ padding: '5px 12px', fontSize: '13px' }} onClick={() => setMostrarFormSocio(true)}>+ Agregar socio</Boton>
+        </div>
+
+        {mostrarFormSocio && (
+          <form onSubmit={handleAgregarSocio} style={{ background: '#f8f9fa', borderRadius: '8px', padding: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '12px', alignItems: 'flex-end' }}>
+              <Campo label="Nombre / Factura">
+                <Input value={formSocio.nombre} onChange={e => setFormSocio(p => ({ ...p, nombre: e.target.value }))}
+                  placeholder="Ej: Factura SMV" autoFocus />
+              </Campo>
+              <Campo label="% del honorario">
+                <Input type="number" min="0" max="100" step="0.01" value={formSocio.porcentaje}
+                  onChange={e => setFormSocio(p => ({ ...p, porcentaje: e.target.value }))} placeholder="Ej: 33.33" />
+              </Campo>
+              <div style={{ paddingBottom: '4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={formSocio.aplica_iva}
+                    onChange={e => setFormSocio(p => ({ ...p, aplica_iva: e.target.checked }))} />
+                  IVA 21%
+                </label>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <Boton type="button" variante="secundario" onClick={() => setMostrarFormSocio(false)}>Cancelar</Boton>
+              <Boton type="submit" disabled={guardando}>Agregar</Boton>
+            </div>
+          </form>
+        )}
+
+        {honorarios.socios.length === 0 ? (
+          <p style={{ color: '#999', fontSize: '13px' }}>No hay socios agregados todavía.</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <thead>
+              <tr style={{ background: '#f8f9fa' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 500 }}>Nombre</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500 }}>%</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500 }}>Neto</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500 }}>IVA</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500 }}>Subtotal</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {honorarios.socios.map(s => (
+                <tr key={s.id} style={{ borderBottom: '1px solid #e0e0e0' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{s.nombre}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right', color: '#666' }}>{s.porcentaje}%</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>{fmt(s.monto_neto)}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right', color: '#666' }}>{s.aplica_iva ? fmt(s.monto_iva) : '—'}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{fmt(s.monto_total)}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                    <Boton variante="peligro" style={{ padding: '3px 8px', fontSize: '11px' }} onClick={() => handleEliminarSocio(s.id)}>✕</Boton>
+                  </td>
+                </tr>
+              ))}
+              <tr style={{ background: '#f8f9fa', fontWeight: 700 }}>
+                <td colSpan={4} style={{ padding: '8px 12px', textAlign: 'right' }}>Total</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: AZUL }}>{fmt(totalSocios)}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Rendición de Obra (comprobantes) ─────────────────────────────────────────
 export default function RendicionDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { rendicion, cargando, error, agregarComprobante, actualizarComprobante, eliminarComprobante, cargar } = useRendicion(id);
   const [modal, setModal] = useState(null);
   const [guardando, setGuardando] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
   const [errorAccion, setErrorAccion] = useState('');
 
   if (cargando) return <div style={{ padding: '32px', color: '#666', fontSize: '14px' }}>Cargando…</div>;
   if (error) return <div style={{ padding: '32px' }}><AlertaError mensaje={error} /></div>;
   if (!rendicion) return null;
 
-  // Si es rendición de honorarios, mostrar vista especial
   if (rendicion.es_honorarios) {
     return <RendicionHonorarios rendicion={rendicion} id={id} cargar={cargar} />;
   }
@@ -347,7 +436,6 @@ export default function RendicionDetalle() {
     window.open(`${BASE}/rendiciones/${id}/pdf?token=${token}`, '_blank');
   };
 
-  // Agrupar comprobantes por moneda
   const porMoneda = { ARS: [], USD: [] };
   rendicion.comprobantes.forEach(c => { porMoneda[c.moneda]?.push(c); });
 
@@ -358,9 +446,7 @@ export default function RendicionDetalle() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 500 }}>{rendicion.tipo}{rendicion.numero}</h1>
-          <p style={{ margin: '6px 0 0', fontSize: '14px', color: '#666' }}>
-            {rendicion.cliente_nombre} — {rendicion.proyecto_nombre}
-          </p>
+          <p style={{ margin: '6px 0 0', fontSize: '14px', color: '#666' }}>{rendicion.cliente_nombre} — {rendicion.proyecto_nombre}</p>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#999' }}>{fmtF(rendicion.fecha)}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -413,7 +499,7 @@ export default function RendicionDetalle() {
         </p>
       )}
 
-{modal === 'crear' && (
+      {modal === 'crear' && (
         <Modal titulo="Agregar comprobante" onCerrar={cerrarModal} ancho={560}>
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
           <FormComprobante rendicionId={id} onGuardar={handleGuardar} onCancelar={cerrarModal} guardando={guardando} />
@@ -427,13 +513,6 @@ export default function RendicionDetalle() {
         </Modal>
       )}
 
-      {modal && modal !== 'crear' && !modal.eliminar && (
-        <Modal titulo="Editar comprobante" onCerrar={cerrarModal} ancho={560}>
-          <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
-          <FormComprobante inicial={modal} onGuardar={handleGuardar} onCancelar={cerrarModal} guardando={guardando} />
-        </Modal>
-      )}
-
       {modal?.eliminar && (
         <Modal titulo="Eliminar comprobante" onCerrar={cerrarModal} ancho={420}>
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
@@ -442,7 +521,9 @@ export default function RendicionDetalle() {
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
             <Boton variante="secundario" onClick={cerrarModal}>Cancelar</Boton>
-            <Boton variante="peligro" onClick={handleEliminar}>Sí, eliminar</Boton>
+            <Boton variante="peligro" onClick={handleEliminar} disabled={eliminando}>
+              {eliminando ? 'Eliminando…' : 'Sí, eliminar'}
+            </Boton>
           </div>
         </Modal>
       )}
