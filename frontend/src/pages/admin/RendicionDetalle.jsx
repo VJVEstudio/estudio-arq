@@ -227,6 +227,7 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
         nombre: formSocio.nombre,
         porcentaje: Number(formSocio.porcentaje),
         aplica_iva: formSocio.aplica_iva,
+        honorario_total: honorarioTotal,
       });
       setFormSocio({ nombre: '', porcentaje: '', aplica_iva: false });
       setMostrarFormSocio(false);
