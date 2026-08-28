@@ -184,6 +184,10 @@ export default function RendicionDetalle() {
   if (cargando) return <div style={{ padding: '32px', color: '#666', fontSize: '14px' }}>Cargando…</div>;
   if (error) return <div style={{ padding: '32px' }}><AlertaError mensaje={error} /></div>;
   if (!rendicion) return null;
+    // Si es rendición de honorarios, mostrar vista especial
+  if (rendicion.es_honorarios) {
+    return <RendicionHonorarios rendicion={rendicion} id={id} cargar={cargar} />;
+  }
 
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
 
