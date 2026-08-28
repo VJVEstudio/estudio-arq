@@ -172,7 +172,141 @@ return (
     </form>
   );
 }
+function RendicionHonorarios({ rendicion, id, cargar }) {
+  const navigate = useNavigate();
+  const [honorarios, setHonorarios] = useState({ bases: [], socios: [] });
+  const [pct, setPct] = useState(rendicion.porcentaje_honorarios || '');
+  const [todasRendiciones, setTodasRendiciones] = useState([]);
+  const [guardando, setGuardando] = useState(false);
+  const [errorAccion, setErrorAccion] = useState('');
+  const [formSocio, setFormSocio] = useState({ nombre: '', porcentaje: '', aplica_iva: false });
+  const [mostrarFormSocio, setMostrarFormSocio] = useState(false);
+  const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
+  const cargarHonorarios = async () => {
+    const { get } = await import('../../lib/api');
+    const [h, r] = await Promise.all([
+      get(`/rendiciones/${id}/honorarios`),
+      get('/rendiciones'),
+    ]);
+    setHonorarios(h);
+    setTodasRendiciones(r.filter(r2 => r2.id !== id && !r2.es_honorarios));
+  };
+
+  useEffect(() => { cargarHonorarios(); }, [id]);
+
+  const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtF = (f) => {
+    if (!f) return '—';
+    const fecha = typeof f === 'string' ? f.split('T')[0] : f;
+    const d = new Date(fecha + 'T00:00:00');
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('es-AR');
+  };
+
+  const totalBase = honorarios.bases.reduce((s, b) => s + Number(b.total_ars), 0);
+  const honorarioTotal = totalBase * Number(pct || 0) / 100;
+  const totalSocios = honorarios.socios.reduce((s, sc) => s + Number(sc.monto_total), 0);
+
+  const handleAgregarBase = async (rendicion_base_id) => {
+    const { post } = await import('../../lib/api');
+    try {
+      await post(`/rendiciones/${id}/honorarios/base`, { rendicion_base_id });
+      await cargarHonorarios();
+      await handleRecalcular();
+    } catch (err) { setErrorAccion(err.message); }
+  };
+
+  const handleEliminarBase = async (baseId) => {
+    const { del } = await import('../../lib/api');
+    try {
+      await del(`/rendiciones/honorarios/base/${baseId}`);
+      await cargarHonorarios();
+      await handleRecalcular();
+    } catch (err) { setErrorAccion(err.message); }
+  };
+
+  const handleRecalcular = async () => {
+    const { put } = await import('../../lib/api');
+    try {
+      await put(`/rendiciones/${id}/honorarios/calcular`, { porcentaje_honorarios: Number(pct) });
+      await cargarHonorarios();
+    } catch (err) { setErrorAccion(err.message); }
+  };
+
+  const handleAgregarSocio = async (e) => {
+    e.preventDefault();
+    const { post } = await import('../../lib/api');
+    setGuardando(true);
+    try {
+      await post(`/rendiciones/${id}/honorarios/socios`, {
+        nombre: formSocio.nombre,
+        porcentaje: Number(formSocio.porcentaje),
+        aplica_iva: formSocio.aplica_iva,
+      });
+      setFormSocio({ nombre: '', porcentaje: '', aplica_iva: false });
+      setMostrarFormSocio(false);
+      await cargarHonorarios();
+    } catch (err) { setErrorAccion(err.message); }
+    finally { setGuardando(false); }
+  };
+
+  const handleEliminarSocio = async (socioId) => {
+    const { del } = await import('../../lib/api');
+    try {
+      await del(`/rendiciones/honorarios/socios/${socioId}`);
+      await cargarHonorarios();
+    } catch (err) { setErrorAccion(err.message); }
+  };
+
+  const handleExportarPDF = () => {
+    const token = getAccessToken();
+    window.open(`${BASE}/rendiciones/${id}/pdf?token=${token}`, '_blank');
+  };
+
+  return (
+    <div style={{ padding: '32px', maxWidth: '900px' }}>
+      <Boton variante="texto" onClick={() => navigate('/admin/rendiciones')} style={{ marginBottom: '12px', color: '#666', fontSize: '13px' }}>← Volver</Boton>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 500 }}>{rendicion.tipo}{rendicion.numero}</h1>
+          <p style={{ margin: '6px 0 0', fontSize: '14px', color: '#666' }}>{rendicion.cliente_nombre} — {rendicion.proyecto_nombre}</p>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#999' }}>{fmtF(rendicion.fecha)}</p>
+        </div>
+        <Boton variante="secundario" onClick={handleExportarPDF}>⬇ Exportar PDF</Boton>
+      </div>
+
+      <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
+
+      {/* Rendiciones base */}
+      <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
+        <p style={{ fontWeight: 500, fontSize: '15px', margin: '0 0 14px' }}>Rendiciones base</p>
+
+        {honorarios.bases.length === 0 ? (
+          <p style={{ color: '#999', fontSize: '13px', marginBottom: '12px' }}>No hay rendiciones base agregadas todavía.</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px', marginBottom: '12px' }}>
+            <thead>
+              <tr style={{ background: '#f8f9fa' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 500 }}>Rendición</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500 }}>Neto</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 500 }}>Subtotal</th>
+                <th style={{ padding: '8px 12px' }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {honorarios.bases.map(b => (
+                <tr key={b.id} style={{ borderBottom: '1px solid #e0e0e0' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 500 }}>{b.tipo}{b.numero}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>{fmt(b.total_ars)}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 600 }}>{fmt(b.total_ars)}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>
+                    <Boton variante="peligro" style={{ padding: '3px 8px', fontSize: '11px' }} onClick={() => handleEliminarBase(b.id)}>✕</Boton>
+                  </td>
+                </tr>
+              ))}
+              <tr style={{ background: '#f8f9fa', fontWeight: 700 }}>
 export default function RendicionDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
