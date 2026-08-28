@@ -86,9 +86,9 @@ router.post('/', async (req, res) => {
     const numero = numRows[0].siguiente;
 
     const { rows } = await client.query(
-      `INSERT INTO rendiciones (proyecto_id, tipo, numero, fecha, notas)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [proyecto_id, tipo.trim().toUpperCase(), numero, fecha, notas || null]
+      `INSERT INTO rendiciones (proyecto_id, tipo, numero, fecha, notas, es_honorarios)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [proyecto_id, tipo.trim().toUpperCase(), numero, fecha, notas || null, es_honorarios ?? false]
     );
     await client.query('COMMIT');
     res.status(201).json(rows[0]);
