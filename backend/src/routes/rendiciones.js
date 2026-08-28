@@ -361,5 +361,133 @@ const esNegativo = Number(c.monto_total) < 0;
 
   doc.end();
 });
+// ── RHDT: Rendición de Honorarios DT ─────────────────────────────────────────
 
+// GET /api/rendiciones/:id/honorarios
+router.get('/:id/honorarios', async (req, res) => {
+  const { rows: bases } = await query(
+    `SELECT rhb.id, rhb.rendicion_base_id,
+            r.tipo, r.numero, r.fecha,
+            COALESCE((SELECT SUM(rc.monto_total) FROM rendicion_comprobantes rc WHERE rc.rendicion_id = r.id AND rc.moneda = 'ARS'), 0) AS total_ars
+     FROM rendicion_honorarios_base rhb
+     JOIN rendiciones r ON r.id = rhb.rendicion_base_id
+     WHERE rhb.rendicion_id = $1
+     ORDER BY rhb.created_at ASC`,
+    [req.params.id]
+  );
+  const { rows: socios } = await query(
+    `SELECT * FROM rendicion_honorarios_socios
+     WHERE rendicion_id = $1 ORDER BY orden ASC`,
+    [req.params.id]
+  );
+  res.json({ bases, socios });
+});
+
+// POST /api/rendiciones/:id/honorarios/base — agregar una rendición base
+router.post('/:id/honorarios/base', async (req, res) => {
+  const { rendicion_base_id } = req.body;
+  if (!rendicion_base_id) return res.status(400).json({ error: 'rendicion_base_id es obligatorio' });
+  const { rows } = await query(
+    `INSERT INTO rendicion_honorarios_base (rendicion_id, rendicion_base_id)
+     VALUES ($1, $2) RETURNING *`,
+    [req.params.id, rendicion_base_id]
+  );
+  res.status(201).json(rows[0]);
+});
+
+// DELETE /api/rendiciones/honorarios/base/:id
+router.delete('/honorarios/base/:id', async (req, res) => {
+  await query(`DELETE FROM rendicion_honorarios_base WHERE id=$1`, [req.params.id]);
+  res.status(204).send();
+});
+
+// POST /api/rendiciones/:id/honorarios/socios — agregar un socio
+router.post('/:id/honorarios/socios', async (req, res) => {
+  const { nombre, porcentaje, aplica_iva } = req.body;
+  if (!nombre?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
+
+  const { rows: rendRow } = await query(
+    `SELECT porcentaje_honorarios, total_base FROM rendiciones WHERE id = $1`, [req.params.id]
+  );
+  const pctHonorarios = Number(rendRow[0]?.porcentaje_honorarios || 0);
+  const totalBase = Number(rendRow[0]?.total_base || 0);
+  const honorarioTotal = totalBase * pctHonorarios / 100;
+  const monto_neto = Math.round(honorarioTotal * Number(porcentaje) / 100 * 100) / 100;
+  const monto_iva = aplica_iva ? Math.round(monto_neto * 0.21 * 100) / 100 : 0;
+  const monto_total = monto_neto + monto_iva;
+
+  const { rows: ordenRows } = await query(
+    `SELECT COALESCE(MAX(orden), 0) + 1 AS siguiente FROM rendicion_honorarios_socios WHERE rendicion_id = $1`,
+    [req.params.id]
+  );
+
+  const { rows } = await query(
+    `INSERT INTO rendicion_honorarios_socios
+       (rendicion_id, nombre, porcentaje, aplica_iva, monto_neto, monto_iva, monto_total, orden)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [req.params.id, nombre.trim(), Number(porcentaje), aplica_iva ?? false,
+     monto_neto, monto_iva, monto_total, ordenRows[0].siguiente]
+  );
+  res.status(201).json(rows[0]);
+});
+
+// DELETE /api/rendiciones/honorarios/socios/:id
+router.delete('/honorarios/socios/:id', async (req, res) => {
+  await query(`DELETE FROM rendicion_honorarios_socios WHERE id=$1`, [req.params.id]);
+  res.status(204).send();
+});
+
+// PUT /api/rendiciones/:id/honorarios/calcular — recalcular todo al cambiar % o bases
+router.put('/:id/honorarios/calcular', async (req, res) => {
+  const { porcentaje_honorarios } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Calcular el total base sumando todas las rendiciones vinculadas
+    const { rows: bases } = await client.query(
+      `SELECT COALESCE(SUM(
+         (SELECT COALESCE(SUM(rc.monto_total), 0)
+          FROM rendicion_comprobantes rc
+          WHERE rc.rendicion_id = rhb.rendicion_base_id AND rc.moneda = 'ARS')
+       ), 0) AS total
+       FROM rendicion_honorarios_base rhb
+       WHERE rhb.rendicion_id = $1`,
+      [req.params.id]
+    );
+    const totalBase = Number(bases[0].total);
+    const pct = Number(porcentaje_honorarios);
+    const honorarioTotal = totalBase * pct / 100;
+
+    // Actualizar la rendición con el total base y el porcentaje
+    await client.query(
+      `UPDATE rendiciones SET porcentaje_honorarios=$1, total_base=$2 WHERE id=$3`,
+      [pct, totalBase, req.params.id]
+    );
+
+    // Recalcular cada socio
+    const { rows: socios } = await client.query(
+      `SELECT * FROM rendicion_honorarios_socios WHERE rendicion_id=$1 ORDER BY orden ASC`,
+      [req.params.id]
+    );
+    for (const s of socios) {
+      const monto_neto = Math.round(honorarioTotal * Number(s.porcentaje) / 100 * 100) / 100;
+      const monto_iva = s.aplica_iva ? Math.round(monto_neto * 0.21 * 100) / 100 : 0;
+      const monto_total = monto_neto + monto_iva;
+      await client.query(
+        `UPDATE rendicion_honorarios_socios SET monto_neto=$1, monto_iva=$2, monto_total=$3 WHERE id=$4`,
+        [monto_neto, monto_iva, monto_total, s.id]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ total_base: totalBase, honorario_total: honorarioTotal });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error calculando honorarios:', err);
+    res.status(500).json({ error: 'Error al calcular honorarios' });
+  } finally {
+    client.release();
+  }
+});
 module.exports = router;
