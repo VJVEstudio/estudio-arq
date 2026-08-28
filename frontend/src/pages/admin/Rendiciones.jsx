@@ -40,6 +40,7 @@ function BadgeEstado({ estado }) {
 function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obtenerSiguienteNumero }) {
   const [form, setForm] = useState({
     proyecto_id: '',
+    prefijo: '',
     tipo: 'RO',
     tipoPersonalizado: '',
     fecha: new Date().toISOString().split('T')[0],
