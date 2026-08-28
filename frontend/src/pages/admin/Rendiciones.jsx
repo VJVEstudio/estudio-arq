@@ -140,6 +140,7 @@ export default function Rendiciones() {
   const navigate = useNavigate();
   const [filtros, setFiltros] = useState({ proyecto_id: '', tipo: '' });
   const [buscar, setBuscar] = useState('');
+  const [filtroPrefijo, setFiltroPrefijo] = useState('');
   const [proyectos, setProyectos] = useState([]);
   const [modal, setModal] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -151,11 +152,21 @@ export default function Rendiciones() {
 
   const { rendiciones, cargando, error, crear, eliminar, obtenerSiguienteNumero } = useRendiciones(filtros);
 
-  const rendicionesFiltradas = buscar
-    ? rendiciones.filter(r =>
-        r.proyecto_nombre?.toLowerCase().includes(buscar.toLowerCase()) ||
-        r.cliente_nombre?.toLowerCase().includes(buscar.toLowerCase()))
-    : rendiciones;
+  const rendicionesFiltradas = rendiciones.filter(r => {
+    if (buscar && !r.proyecto_nombre?.toLowerCase().includes(buscar.toLowerCase()) &&
+        !r.cliente_nombre?.toLowerCase().includes(buscar.toLowerCase())) return false;
+    if (filtroPrefijo) {
+      const prefijo = r.tipo.includes('-') ? r.tipo.split('-')[0] : '';
+      if (prefijo !== filtroPrefijo) return false;
+    }
+    return true;
+  });
+
+  const prefijosDisponibles = [...new Set(
+    rendiciones
+      .map(r => r.tipo.includes('-') ? r.tipo.split('-')[0] : null)
+      .filter(Boolean)
+  )].sort();
 
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
 
@@ -199,7 +210,13 @@ export default function Rendiciones() {
           <option value="RHP">RHP — Honorarios de Proyecto</option>
           <option value="RV">RV — Viáticos</option>
           <option value="RE">RE — Especialistas</option>
-        </Select>
+        </Select
+                {prefijosDisponibles.length > 0 && (
+          <Select value={filtroPrefijo} onChange={e => setFiltroPrefijo(e.target.value)} style={{ width: 'auto' }}>
+            <option value="">Todos los prefijos</option>
+            {prefijosDisponibles.map(p => <option key={p} value={p}>{p}</option>)}
+          </Select>
+        )}
       </div>
 
       <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
