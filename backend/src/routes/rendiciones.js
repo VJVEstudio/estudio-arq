@@ -403,15 +403,10 @@ router.delete('/honorarios/base/:id', async (req, res) => {
 
 // POST /api/rendiciones/:id/honorarios/socios — agregar un socio
 router.post('/:id/honorarios/socios', async (req, res) => {
-  const { nombre, porcentaje, aplica_iva } = req.body;
+  const { nombre, porcentaje, aplica_iva, honorario_total } = req.body;
   if (!nombre?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
 
-  const { rows: rendRow } = await query(
-    `SELECT porcentaje_honorarios, total_base FROM rendiciones WHERE id = $1`, [req.params.id]
-  );
-  const pctHonorarios = Number(rendRow[0]?.porcentaje_honorarios || 0);
-  const totalBase = Number(rendRow[0]?.total_base || 0);
-  const honorarioTotal = totalBase * pctHonorarios / 100;
+  const honorarioTotal = Number(honorario_total || 0);
   const monto_neto = Math.round(honorarioTotal * Number(porcentaje) / 100 * 100) / 100;
   const monto_iva = aplica_iva ? Math.round(monto_neto * 0.21 * 100) / 100 : 0;
   const monto_total = monto_neto + monto_iva;
