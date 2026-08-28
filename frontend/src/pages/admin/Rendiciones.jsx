@@ -45,6 +45,7 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
     tipoPersonalizado: '',
     fecha: new Date().toISOString().split('T')[0],
     notas: '',
+    es_honorarios: false,
   });
   const [siguienteNumero, setSiguienteNumero] = useState(null);
   const [errores, setErrores] = useState({});
