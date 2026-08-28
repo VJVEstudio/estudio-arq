@@ -50,7 +50,8 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
   const [errores, setErrores] = useState({});
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
 
-  const tipoFinal = form.tipo === 'otro' ? form.tipoPersonalizado.trim().toUpperCase() : form.tipo;
+  const tipoBase = form.tipo === 'otro' ? form.tipoPersonalizado.trim().toUpperCase() : form.tipo;
+  const tipoFinal = form.prefijo.trim() ? `${form.prefijo.trim().toUpperCase()}-${tipoBase}` : tipoBase;
 
   useEffect(() => {
     if (form.proyecto_id && tipoFinal) {
@@ -64,7 +65,7 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
   const validar = () => {
     const errs = {};
     if (!form.proyecto_id) errs.proyecto_id = 'Seleccioná un proyecto';
-    if (!tipoFinal) errs.tipo = 'Indicá el tipo de rendición';
+    if (!tipoBase) errs.tipo = 'Indicá el tipo de rendición';
     if (!form.fecha) errs.fecha = 'La fecha es obligatoria';
     setErrores(errs);
     return Object.keys(errs).length === 0;
@@ -84,26 +85,31 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
           {proyectos.map(p => <option key={p.id} value={p.id}>{p.cliente_nombre} - {p.nombre}</option>)}
         </Select>
       </Campo>
-      <div style={{ display: 'grid', gridTemplateColumns: form.tipo === 'otro' ? '1fr 1fr' : '1fr', gap: '16px' }}>
-                <Campo label="Prefijo (opcional)">
-          <Input value={form.prefijo} onChange={set('prefijo')} placeholder="Ej: T, CDI, LEBEN" />
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
+        <Campo label="Prefijo (opcional)">
+          <Input value={form.prefijo} onChange={set('prefijo')} placeholder="Ej: T, CDI" />
         </Campo>
+        <Campo label="Tipo de rendición *" error={errores.tipo}>
           <Select value={form.tipo} onChange={set('tipo')}>
             {TIPOS_SUGERIDOS.map(t => <option key={t} value={t}>{t === 'RH' ? 'RH — Honorarios' : 'RO — Obra'}</option>)}
             <option value="otro">Otro…</option>
           </Select>
         </Campo>
-        {form.tipo === 'otro' && (
-          <Campo label="Especificar tipo">
-            <Input value={form.tipoPersonalizado} onChange={set('tipoPersonalizado')} placeholder="Ej: RM" />
-          </Campo>
-        )}
       </div>
-      {siguienteNumero !== null && (
+
+      {form.tipo === 'otro' && (
+        <Campo label="Especificar tipo">
+          <Input value={form.tipoPersonalizado} onChange={set('tipoPersonalizado')} placeholder="Ej: RM" />
+        </Campo>
+      )}
+
+      {siguienteNumero !== null && tipoFinal && (
         <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#1a2744' }}>
           Esta será la rendición <strong>{tipoFinal}{siguienteNumero}</strong> para este proyecto.
         </div>
       )}
+
       <Campo label="Fecha *" error={errores.fecha}>
         <Input type="date" value={form.fecha} onChange={set('fecha')} />
       </Campo>
