@@ -93,7 +93,12 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
         </Campo>
         <Campo label="Tipo de rendición *" error={errores.tipo}>
           <Select value={form.tipo} onChange={set('tipo')}>
-            {TIPOS_SUGERIDOS.map(t => <option key={t} value={t}>{t === 'RH' ? 'RH — Honorarios' : 'RO — Obra'}</option>)}
+            <option value="RO">RO — Obra</option>
+            <option value="RH">RH — Honorarios</option>
+            <option value="RHDT">RHDT — Honorarios DT</option>
+            <option value="RHP">RHP — Honorarios de Proyecto</option>
+            <option value="RV">RV — Viáticos</option>
+             <option value="RE">RE — Especialistas</option>
             <option value="otro">Otro…</option>
           </Select>
         </Campo>
