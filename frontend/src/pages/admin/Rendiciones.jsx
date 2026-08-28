@@ -8,7 +8,7 @@ import {
 } from '../../components/ui';
 
 const AZUL = '#1a2744';
-const TIPOS_SUGERIDOS = ['RH', 'RO'];
+const TIPOS_HONORARIOS = ['RHDT', 'RHP'];
 
 const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
@@ -45,7 +45,6 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
     tipoPersonalizado: '',
     fecha: new Date().toISOString().split('T')[0],
     notas: '',
-    es_honorarios: false,
   });
   const [siguienteNumero, setSiguienteNumero] = useState(null);
   const [errores, setErrores] = useState({});
@@ -53,6 +52,7 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
 
   const tipoBase = form.tipo === 'otro' ? form.tipoPersonalizado.trim().toUpperCase() : form.tipo;
   const tipoFinal = form.prefijo.trim() ? `${form.prefijo.trim().toUpperCase()}-${tipoBase}` : tipoBase;
+  const esHonorarios = TIPOS_HONORARIOS.includes(tipoBase);
 
   useEffect(() => {
     if (form.proyecto_id && tipoFinal) {
@@ -75,7 +75,7 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validar()) return;
-    onGuardar({ proyecto_id: form.proyecto_id, tipo: tipoFinal, fecha: form.fecha, notas: form.notas, es_honorarios: form.es_honorarios });
+    onGuardar({ proyecto_id: form.proyecto_id, tipo: tipoFinal, fecha: form.fecha, notas: form.notas, es_honorarios: esHonorarios });
   };
 
   return (
@@ -98,7 +98,7 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
             <option value="RHDT">RHDT — Honorarios DT</option>
             <option value="RHP">RHP — Honorarios de Proyecto</option>
             <option value="RV">RV — Viáticos</option>
-             <option value="RE">RE — Especialistas</option>
+            <option value="RE">RE — Especialistas</option>
             <option value="otro">Otro…</option>
           </Select>
         </Campo>
@@ -108,6 +108,12 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
         <Campo label="Especificar tipo">
           <Input value={form.tipoPersonalizado} onChange={set('tipoPersonalizado')} placeholder="Ej: RM" />
         </Campo>
+      )}
+
+      {esHonorarios && (
+        <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#1a2744' }}>
+          Esta rendición usará la vista de <strong>Honorarios</strong> — podrás vincular rendiciones base y distribuir por socios.
+        </div>
       )}
 
       {siguienteNumero !== null && tipoFinal && (
@@ -122,11 +128,6 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
       <Campo label="Notas (opcional)">
         <Input value={form.notas} onChange={set('notas')} placeholder="Notas internas…" />
       </Campo>
-      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', marginBottom: '16px', cursor: 'pointer' }}>
-        <input type="checkbox" checked={form.es_honorarios}
-          onChange={e => setForm(p => ({ ...p, es_honorarios: e.target.checked }))} />
-        <span>Es rendición de honorarios (RHDT / RHP)</span>
-      </label>
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
         <Boton type="button" variante="secundario" onClick={onCancelar}>Cancelar</Boton>
         <Boton type="submit" disabled={guardando}>{guardando ? 'Creando…' : 'Crear rendición'}</Boton>
@@ -192,8 +193,12 @@ export default function Rendiciones() {
         </Select>
         <Select value={filtros.tipo} onChange={setFiltro('tipo')} style={{ width: 'auto' }}>
           <option value="">Todos los tipos</option>
-          <option value="RH">RH — Honorarios</option>
           <option value="RO">RO — Obra</option>
+          <option value="RH">RH — Honorarios</option>
+          <option value="RHDT">RHDT — Honorarios DT</option>
+          <option value="RHP">RHP — Honorarios de Proyecto</option>
+          <option value="RV">RV — Viáticos</option>
+          <option value="RE">RE — Especialistas</option>
         </Select>
       </div>
 
@@ -209,7 +214,10 @@ export default function Rendiciones() {
             vacio="No hay rendiciones. Creá la primera."
             renderFila={(r) => (
               <Fila key={r.id} onClick={() => navigate(`/admin/rendiciones/${r.id}`)}>
-                <Celda><span style={{ fontWeight: 600, color: AZUL }}>{r.tipo}{r.numero}</span></Celda>
+                <Celda>
+                  <span style={{ fontWeight: 600, color: AZUL }}>{r.tipo}{r.numero}</span>
+                  {r.es_honorarios && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#e3f2fd', color: '#0d47a1', borderRadius: '10px', padding: '1px 6px' }}>Honorarios</span>}
+                </Celda>
                 <Celda style={{ fontWeight: 500 }}>{r.cliente_nombre}</Celda>
                 <Celda style={{ color: '#666', fontSize: '13px' }}>{r.proyecto_nombre}</Celda>
                 <Celda style={{ color: '#666', fontSize: '13px', whiteSpace: 'nowrap' }}>{fmtF(r.fecha)}</Celda>
