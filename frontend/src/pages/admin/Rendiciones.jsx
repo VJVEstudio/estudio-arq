@@ -85,7 +85,9 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
         </Select>
       </Campo>
       <div style={{ display: 'grid', gridTemplateColumns: form.tipo === 'otro' ? '1fr 1fr' : '1fr', gap: '16px' }}>
-        <Campo label="Tipo de rendición *" error={errores.tipo}>
+                <Campo label="Prefijo (opcional)">
+          <Input value={form.prefijo} onChange={set('prefijo')} placeholder="Ej: T, CDI, LEBEN" />
+        </Campo>
           <Select value={form.tipo} onChange={set('tipo')}>
             {TIPOS_SUGERIDOS.map(t => <option key={t} value={t}>{t === 'RH' ? 'RH — Honorarios' : 'RO — Obra'}</option>)}
             <option value="otro">Otro…</option>
