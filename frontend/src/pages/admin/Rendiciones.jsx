@@ -75,7 +75,7 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validar()) return;
-    onGuardar({ proyecto_id: form.proyecto_id, tipo: tipoFinal, fecha: form.fecha, notas: form.notas });
+    onGuardar({ proyecto_id: form.proyecto_id, tipo: tipoFinal, fecha: form.fecha, notas: form.notas, es_honorarios: form.es_honorarios });
   };
 
   return (
