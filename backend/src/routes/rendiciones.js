@@ -485,4 +485,27 @@ router.put('/:id/honorarios/calcular', async (req, res) => {
     client.release();
   }
 });
+// GET /api/rendiciones/totales?proyecto_id=&tipo=
+router.get('/totales', async (req, res) => {
+  const { proyecto_id, tipo } = req.query;
+  const condiciones = ['TRUE'];
+  const params = [];
+  if (proyecto_id) { params.push(proyecto_id); condiciones.push(`r.proyecto_id = $${params.length}`); }
+  if (tipo)        { params.push(tipo);        condiciones.push(`r.tipo = $${params.length}`); }
+
+  const { rows } = await query(
+    `SELECT
+       rc.moneda,
+       COALESCE(SUM(rc.monto_neto), 0)   AS total_neto,
+       COALESCE(SUM(rc.iva), 0)          AS total_iva,
+       COALESCE(SUM(rc.iibb), 0)         AS total_iibb,
+       COALESCE(SUM(rc.monto_total), 0)  AS total
+     FROM rendicion_comprobantes rc
+     JOIN rendiciones r ON r.id = rc.rendicion_id
+     WHERE ${condiciones.join(' AND ')}
+     GROUP BY rc.moneda`,
+    params
+  );
+  res.json(rows);
+});
 module.exports = router;
