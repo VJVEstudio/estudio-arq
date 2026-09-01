@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRendiciones } from '../../hooks/useRendiciones';
 import { get } from '../../lib/api';
@@ -86,7 +86,6 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
           {proyectos.map(p => <option key={p.id} value={p.id}>{p.cliente_nombre} - {p.nombre}</option>)}
         </Select>
       </Campo>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
         <Campo label="Prefijo (opcional)">
           <Input value={form.prefijo} onChange={set('prefijo')} placeholder="Ej: T, CDI" />
@@ -103,25 +102,21 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
           </Select>
         </Campo>
       </div>
-
       {form.tipo === 'otro' && (
         <Campo label="Especificar tipo">
           <Input value={form.tipoPersonalizado} onChange={set('tipoPersonalizado')} placeholder="Ej: RM" />
         </Campo>
       )}
-
       {esHonorarios && (
         <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#1a2744' }}>
           Esta rendición usará la vista de <strong>Honorarios</strong> — podrás vincular rendiciones base y distribuir por socios.
         </div>
       )}
-
       {siguienteNumero !== null && tipoFinal && (
         <div style={{ background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#1a2744' }}>
           Esta será la rendición <strong>{tipoFinal}{siguienteNumero}</strong> para este proyecto.
         </div>
       )}
-
       <Campo label="Fecha *" error={errores.fecha}>
         <Input type="date" value={form.fecha} onChange={set('fecha')} />
       </Campo>
@@ -155,19 +150,11 @@ export default function Rendiciones() {
 
   const { rendiciones, cargando, error, crear, eliminar, obtenerSiguienteNumero } = useRendiciones(filtros);
 
-  useEffect(() => {
-    if (!rendicionesFiltradas.length) { setTotales([]); return; }
-    const ids = rendicionesFiltradas.map(r => r.id).join(',');
-    get(`/rendiciones/totales?ids=${ids}`).then(setTotales).catch(() => {});
-  }, [rendicionesFiltradas.map(r => r.id).join(',')]);
+  const prefijosDisponibles = useMemo(() => [...new Set(
+    rendiciones.map(r => r.tipo.includes('-') ? r.tipo.split('-')[0] : null).filter(Boolean)
+  )].sort(), [rendiciones]);
 
-  const prefijosDisponibles = [...new Set(
-    rendiciones
-      .map(r => r.tipo.includes('-') ? r.tipo.split('-')[0] : null)
-      .filter(Boolean)
-  )].sort();
-
-  const rendicionesFiltradas = rendiciones
+  const rendicionesFiltradas = useMemo(() => rendiciones
     .filter(r => {
       if (buscar && !r.proyecto_nombre?.toLowerCase().includes(buscar.toLowerCase()) &&
           !r.cliente_nombre?.toLowerCase().includes(buscar.toLowerCase())) return false;
@@ -186,7 +173,14 @@ export default function Rendiciones() {
       if (orden === 'fecha_asc')  return new Date(a.fecha) - new Date(b.fecha);
       if (orden === 'tipo_asc')   return a.tipo.localeCompare(b.tipo);
       return 0;
-    });
+    }), [rendiciones, buscar, filtroPrefijo, filtroTipo, orden]);
+
+  const idsKey = rendicionesFiltradas.map(r => r.id).join(',');
+
+  useEffect(() => {
+    if (!idsKey) { setTotales([]); return; }
+    get(`/rendiciones/totales?ids=${idsKey}`).then(setTotales).catch(() => {});
+  }, [idsKey]);
 
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
 
@@ -244,15 +238,16 @@ export default function Rendiciones() {
         </Select>
       </div>
 
-            <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
+      <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
 
-      {/* Barra de totales */}
       {totales.length > 0 && (
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 20px', marginBottom: '20px' }}>
           <p style={{ margin: '0 0 12px', fontWeight: 500, fontSize: '14px', color: '#666' }}>Totales según filtros activos</p>
           {totales.map(t => (
-            <div key={t.moneda} style={{ marginBottom: t.moneda === 'USD' ? 0 : '8px' }}>
-              <p style={{ margin: '0 0 6px', fontSize: '12px', color: '#999', textTransform: 'uppercase' }}>{t.moneda === 'USD' ? 'U$S Dólares' : '$ Pesos argentinos'}</p>
+            <div key={t.moneda} style={{ marginBottom: t.moneda === 'USD' ? 0 : '12px' }}>
+              <p style={{ margin: '0 0 6px', fontSize: '12px', color: '#999', textTransform: 'uppercase' }}>
+                {t.moneda === 'USD' ? 'U$S Dólares' : '$ Pesos argentinos'}
+              </p>
               <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                 {[
                   { label: 'Neto', valor: t.total_neto },
