@@ -141,6 +141,7 @@ export default function Rendiciones() {
   const [filtros, setFiltros] = useState({ proyecto_id: '', tipo: '' });
   const [buscar, setBuscar] = useState('');
   const [filtroPrefijo, setFiltroPrefijo] = useState('');
+  const [orden, setOrden] = useState('fecha_desc');
   const [proyectos, setProyectos] = useState([]);
   const [modal, setModal] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -152,21 +153,28 @@ export default function Rendiciones() {
 
   const { rendiciones, cargando, error, crear, eliminar, obtenerSiguienteNumero } = useRendiciones(filtros);
 
-  const rendicionesFiltradas = rendiciones.filter(r => {
-    if (buscar && !r.proyecto_nombre?.toLowerCase().includes(buscar.toLowerCase()) &&
-        !r.cliente_nombre?.toLowerCase().includes(buscar.toLowerCase())) return false;
-    if (filtroPrefijo) {
-      const prefijo = r.tipo.includes('-') ? r.tipo.split('-')[0] : '';
-      if (prefijo !== filtroPrefijo) return false;
-    }
-    return true;
-  });
-
   const prefijosDisponibles = [...new Set(
     rendiciones
       .map(r => r.tipo.includes('-') ? r.tipo.split('-')[0] : null)
       .filter(Boolean)
   )].sort();
+
+  const rendicionesFiltradas = rendiciones
+    .filter(r => {
+      if (buscar && !r.proyecto_nombre?.toLowerCase().includes(buscar.toLowerCase()) &&
+          !r.cliente_nombre?.toLowerCase().includes(buscar.toLowerCase())) return false;
+      if (filtroPrefijo) {
+        const prefijo = r.tipo.includes('-') ? r.tipo.split('-')[0] : '';
+        if (prefijo !== filtroPrefijo) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (orden === 'fecha_desc') return new Date(b.fecha) - new Date(a.fecha);
+      if (orden === 'fecha_asc')  return new Date(a.fecha) - new Date(b.fecha);
+      if (orden === 'tipo_asc')   return a.tipo.localeCompare(b.tipo);
+      return 0;
+    });
 
   const cerrarModal = () => { setModal(null); setErrorAccion(''); };
 
@@ -210,13 +218,18 @@ export default function Rendiciones() {
           <option value="RHP">RHP — Honorarios de Proyecto</option>
           <option value="RV">RV — Viáticos</option>
           <option value="RE">RE — Especialistas</option>
-        </Select
-                {prefijosDisponibles.length > 0 && (
+        </Select>
+        {prefijosDisponibles.length > 0 && (
           <Select value={filtroPrefijo} onChange={e => setFiltroPrefijo(e.target.value)} style={{ width: 'auto' }}>
             <option value="">Todos los prefijos</option>
             {prefijosDisponibles.map(p => <option key={p} value={p}>{p}</option>)}
           </Select>
         )}
+        <Select value={orden} onChange={e => setOrden(e.target.value)} style={{ width: 'auto' }}>
+          <option value="fecha_desc">Más recientes primero</option>
+          <option value="fecha_asc">Más antiguas primero</option>
+          <option value="tipo_asc">Por tipo A→Z</option>
+        </Select>
       </div>
 
       <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
