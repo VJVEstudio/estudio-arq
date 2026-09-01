@@ -138,7 +138,9 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
 
 export default function Rendiciones() {
   const navigate = useNavigate();
-  const [filtros, setFiltros] = useState({ proyecto_id: '', tipo: '' });
+  const [filtros, setFiltros] = useState({ proyecto_id: '' });
+  const [filtroTipo, setFiltroTipo] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState('');
   const [buscar, setBuscar] = useState('');
   const [filtroPrefijo, setFiltroPrefijo] = useState('');
   const [orden, setOrden] = useState('fecha_desc');
@@ -166,6 +168,10 @@ export default function Rendiciones() {
       if (filtroPrefijo) {
         const prefijo = r.tipo.includes('-') ? r.tipo.split('-')[0] : '';
         if (prefijo !== filtroPrefijo) return false;
+      }
+      if (filtroTipo) {
+        const tipoSinPrefijo = r.tipo.includes('-') ? r.tipo.split('-').slice(1).join('-') : r.tipo;
+        if (tipoSinPrefijo !== filtroTipo) return false;
       }
       return true;
     })
@@ -210,7 +216,7 @@ export default function Rendiciones() {
           <option value="">Todos los proyectos</option>
           {proyectos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </Select>
-        <Select value={filtros.tipo} onChange={setFiltro('tipo')} style={{ width: 'auto' }}>
+          <Select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} style={{ width: 'auto' }}>
           <option value="">Todos los tipos</option>
           <option value="RO">RO — Obra</option>
           <option value="RH">RH — Honorarios</option>
