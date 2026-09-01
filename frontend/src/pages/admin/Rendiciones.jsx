@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRendiciones } from '../../hooks/useRendiciones';
-import { get } from '../../lib/api';
+import { get, getAccessToken } from '../../lib/api';
 import {
   EncabezadoSeccion, Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, AlertaError, Buscador,
@@ -149,7 +149,7 @@ export default function Rendiciones() {
   }, []);
 
   const { rendiciones, cargando, error, crear, eliminar, obtenerSiguienteNumero } = useRendiciones(filtros);
-
+  const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
   const prefijosDisponibles = useMemo(() => [...new Set(
     rendiciones.map(r => r.tipo.includes('-') ? r.tipo.split('-')[0] : null).filter(Boolean)
   )].sort(), [rendiciones]);
@@ -204,10 +204,26 @@ export default function Rendiciones() {
 
   return (
     <div style={{ padding: '32px', maxWidth: '1100px' }}>
-      <EncabezadoSeccion
+           <EncabezadoSeccion
         titulo="Rendiciones"
         subtitulo={`${rendicionesFiltradas.length} rendición${rendicionesFiltradas.length !== 1 ? 'es' : ''}`}
-        accion={<Boton onClick={() => setModal('crear')}>+ Nueva rendición</Boton>}
+        accion={
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {idsKey && (
+              <>
+                <Boton variante="secundario" onClick={() => {
+                  const token = getAccessToken();
+                  window.open(`${BASE}/rendiciones/exportar/pdf?ids=${idsKey}&token=${token}`, '_blank');
+                }}>⬇ PDF</Boton>
+                <Boton variante="secundario" onClick={() => {
+                  const token = getAccessToken();
+                  window.open(`${BASE}/rendiciones/exportar/excel?ids=${idsKey}&token=${token}`, '_blank');
+                }}>⬇ Excel</Boton>
+              </>
+            )}
+            <Boton onClick={() => setModal('crear')}>+ Nueva rendición</Boton>
+          </div>
+        }
       />
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
