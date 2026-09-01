@@ -143,6 +143,7 @@ export default function Rendiciones() {
   const [filtroPrefijo, setFiltroPrefijo] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
   const [orden, setOrden] = useState('fecha_desc');
+  const [totales, setTotales] = useState([]);
   const [proyectos, setProyectos] = useState([]);
   const [modal, setModal] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -153,6 +154,13 @@ export default function Rendiciones() {
   }, []);
 
   const { rendiciones, cargando, error, crear, eliminar, obtenerSiguienteNumero } = useRendiciones(filtros);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filtros.proyecto_id) params.set('proyecto_id', filtros.proyecto_id);
+    if (filtroTipo) params.set('tipo', filtroTipo);
+    get(`/rendiciones/totales?${params}`).then(setTotales).catch(() => {});
+  }, [filtros.proyecto_id, filtroTipo]);
 
   const prefijosDisponibles = [...new Set(
     rendiciones
@@ -237,7 +245,36 @@ export default function Rendiciones() {
         </Select>
       </div>
 
-      <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
+            <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
+
+      {/* Barra de totales */}
+      {totales.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 20px', marginBottom: '20px' }}>
+          <p style={{ margin: '0 0 12px', fontWeight: 500, fontSize: '14px', color: '#666' }}>Totales según filtros activos</p>
+          {totales.map(t => (
+            <div key={t.moneda} style={{ marginBottom: t.moneda === 'USD' ? 0 : '8px' }}>
+              <p style={{ margin: '0 0 6px', fontSize: '12px', color: '#999', textTransform: 'uppercase' }}>{t.moneda === 'USD' ? 'U$S Dólares' : '$ Pesos argentinos'}</p>
+              <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Neto', valor: t.total_neto },
+                  { label: 'IVA', valor: t.total_iva },
+                  { label: 'IIBB y otros', valor: t.total_iibb },
+                  { label: 'Total', valor: t.total, bold: true },
+                ].map(item => (
+                  <div key={item.label}>
+                    <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#999', textTransform: 'uppercase' }}>{item.label}</p>
+                    <p style={{ margin: 0, fontSize: '15px', fontWeight: item.bold ? 700 : 400, color: item.bold ? AZUL : '#333' }}>
+                      {t.moneda === 'USD'
+                        ? `U$S ${Number(item.valor || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : `$ ${Number(item.valor || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
       : error ? <AlertaError mensaje={error} />
