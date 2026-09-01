@@ -463,5 +463,223 @@ router.put('/:id/honorarios/calcular', async (req, res) => {
     client.release();
   }
 });
+// GET /api/rendiciones/exportar/pdf?ids=...
+router.get('/exportar/pdf', async (req, res) => {
+  const { ids } = req.query;
+  if (!ids) return res.status(400).json({ error: 'ids es obligatorio' });
+  const idArray = ids.split(',').filter(Boolean);
+
+  const { rows: rendiciones } = await query(
+    `SELECT r.*, p.nombre AS proyecto_nombre, c.nombre_razon_social AS cliente_nombre,
+            COALESCE((SELECT SUM(rc.monto_total) FROM rendicion_comprobantes rc WHERE rc.rendicion_id = r.id AND rc.moneda = 'ARS'), 0) AS total_ars,
+            COALESCE((SELECT SUM(rc.monto_total) FROM rendicion_comprobantes rc WHERE rc.rendicion_id = r.id AND rc.moneda = 'USD'), 0) AS total_usd
+     FROM rendiciones r
+     JOIN proyectos p ON p.id = r.proyecto_id
+     JOIN clientes  c ON c.id = p.cliente_id
+     WHERE r.id = ANY($1)
+     ORDER BY r.fecha DESC`,
+    [idArray]
+  );
+
+  const { rows: totales } = await query(
+    `SELECT rc.moneda,
+            COALESCE(SUM(rc.monto_neto), 0)  AS total_neto,
+            COALESCE(SUM(rc.iva), 0)         AS total_iva,
+            COALESCE(SUM(rc.iibb), 0)        AS total_iibb,
+            COALESCE(SUM(rc.monto_total), 0) AS total
+     FROM rendicion_comprobantes rc
+     WHERE rc.rendicion_id = ANY($1)
+     GROUP BY rc.moneda`,
+    [idArray]
+  );
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="resumen-rendiciones.pdf"');
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+  doc.pipe(res);
+
+  const fmtM = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtMUSD = (n) => `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtF = (f) => {
+    if (!f) return '—';
+    const d = new Date(String(f).slice(0, 10) + 'T00:00:00');
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-AR');
+  };
+
+  const margen = 40;
+  const ancho = doc.page.width - 80;
+
+  // Título
+  doc.fontSize(14).font('Helvetica-Bold').fillColor('#1a2744')
+    .text('Resumen de Rendiciones — VJV Arquitectos', margen, margen, { align: 'center', width: ancho });
+  doc.fontSize(9).font('Helvetica').fillColor('#666')
+    .text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, margen, margen + 18, { align: 'center', width: ancho });
+  doc.moveDown(1.5);
+
+  // Tabla de rendiciones
+  const cols = [
+    { x: margen,       w: 70,  label: 'Rendición' },
+    { x: margen + 70,  w: 100, label: 'Cliente' },
+    { x: margen + 170, w: 140, label: 'Proyecto' },
+    { x: margen + 310, w: 60,  label: 'Fecha' },
+    { x: margen + 370, w: 40,  label: 'Comp.' },
+    { x: margen + 410, w: 120, label: 'Total ARS' },
+    { x: margen + 530, w: ancho - 490, label: 'Total USD' },
+  ];
+
+  const altoEnc = 18;
+  let y = doc.y;
+  doc.rect(margen, y, ancho, altoEnc).fillAndStroke('#1a2744', '#1a2744');
+  cols.forEach(c => {
+    doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold')
+      .text(c.label, c.x + 4, y + 5, { width: c.w - 8 });
+  });
+  y += altoEnc;
+
+  rendiciones.forEach((r, idx) => {
+    if (y > 520) { doc.addPage(); y = 40; }
+    const fondo = idx % 2 === 0 ? '#f8f9fa' : '#ffffff';
+    doc.rect(margen, y, ancho, 18).fillAndStroke(fondo, '#e0e0e0');
+    doc.fillColor('#000').fontSize(8).font('Helvetica-Bold');
+    doc.text(`${r.tipo}${r.numero}`, cols[0].x + 4, y + 5, { width: cols[0].w - 8 });
+    doc.font('Helvetica');
+    doc.text(r.cliente_nombre, cols[1].x + 4, y + 5, { width: cols[1].w - 8, ellipsis: true });
+    doc.text(r.proyecto_nombre, cols[2].x + 4, y + 5, { width: cols[2].w - 8, ellipsis: true });
+    doc.text(fmtF(r.fecha), cols[3].x + 4, y + 5, { width: cols[3].w - 8 });
+    doc.text(String(r.cantidad_comprobantes || 0), cols[4].x + 4, y + 5, { width: cols[4].w - 8, align: 'center' });
+    doc.text(Number(r.total_ars) !== 0 ? fmtM(r.total_ars) : '—', cols[5].x + 4, y + 5, { width: cols[5].w - 8, align: 'right' });
+    doc.text(Number(r.total_usd) !== 0 ? fmtMUSD(r.total_usd) : '—', cols[6].x + 4, y + 5, { width: cols[6].w - 8, align: 'right' });
+    y += 18;
+  });
+
+  // Totales
+  doc.moveDown(1);
+  y = doc.y;
+  doc.fontSize(11).font('Helvetica-Bold').fillColor('#1a2744').text('Totales discriminados', margen, y);
+  y += 20;
+
+  totales.forEach(t => {
+    const monedaLabel = t.moneda === 'USD' ? 'U$S Dólares' : '$ Pesos argentinos';
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#666').text(monedaLabel, margen, y);
+    y += 14;
+
+    const items = [
+      { label: 'Neto', valor: t.moneda === 'USD' ? fmtMUSD(t.total_neto) : fmtM(t.total_neto) },
+      { label: 'IVA', valor: t.moneda === 'USD' ? fmtMUSD(t.total_iva) : fmtM(t.total_iva) },
+      { label: 'IIBB y otros', valor: t.moneda === 'USD' ? fmtMUSD(t.total_iibb) : fmtM(t.total_iibb) },
+      { label: 'Total', valor: t.moneda === 'USD' ? fmtMUSD(t.total) : fmtM(t.total) },
+    ];
+
+    const colW = ancho / 4;
+    items.forEach((item, i) => {
+      const x = margen + i * colW;
+      doc.rect(x, y, colW, 32).fillAndStroke(item.label === 'Total' ? '#1a2744' : '#f8f9fa', '#e0e0e0');
+      doc.fillColor(item.label === 'Total' ? '#fff' : '#999').fontSize(8).font('Helvetica')
+        .text(item.label.toUpperCase(), x + 8, y + 6, { width: colW - 16 });
+      doc.fillColor(item.label === 'Total' ? '#fff' : '#1a2744').fontSize(10).font('Helvetica-Bold')
+        .text(item.valor, x + 8, y + 18, { width: colW - 16 });
+    });
+    y += 48;
+  });
+
+  doc.end();
+});
+
+// GET /api/rendiciones/exportar/excel?ids=...
+router.get('/exportar/excel', async (req, res) => {
+  const ExcelJS = require('exceljs');
+  const { ids } = req.query;
+  if (!ids) return res.status(400).json({ error: 'ids es obligatorio' });
+  const idArray = ids.split(',').filter(Boolean);
+
+  const { rows: rendiciones } = await query(
+    `SELECT r.*, p.nombre AS proyecto_nombre, c.nombre_razon_social AS cliente_nombre,
+            COALESCE((SELECT SUM(rc.monto_total) FROM rendicion_comprobantes rc WHERE rc.rendicion_id = r.id AND rc.moneda = 'ARS'), 0) AS total_ars,
+            COALESCE((SELECT SUM(rc.monto_total) FROM rendicion_comprobantes rc WHERE rc.rendicion_id = r.id AND rc.moneda = 'USD'), 0) AS total_usd
+     FROM rendiciones r
+     JOIN proyectos p ON p.id = r.proyecto_id
+     JOIN clientes  c ON c.id = p.cliente_id
+     WHERE r.id = ANY($1)
+     ORDER BY r.fecha DESC`,
+    [idArray]
+  );
+
+  const { rows: totales } = await query(
+    `SELECT rc.moneda,
+            COALESCE(SUM(rc.monto_neto), 0)  AS total_neto,
+            COALESCE(SUM(rc.iva), 0)         AS total_iva,
+            COALESCE(SUM(rc.iibb), 0)        AS total_iibb,
+            COALESCE(SUM(rc.monto_total), 0) AS total
+     FROM rendicion_comprobantes rc
+     WHERE rc.rendicion_id = ANY($1)
+     GROUP BY rc.moneda`,
+    [idArray]
+  );
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Rendiciones');
+
+  // Encabezado
+  ws.mergeCells('A1:G1');
+  ws.getCell('A1').value = 'Resumen de Rendiciones — VJV Arquitectos';
+  ws.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF1A2744' } };
+  ws.getCell('A1').alignment = { horizontal: 'center' };
+
+  ws.addRow([]);
+
+  // Columnas
+  ws.columns = [
+    { key: 'rendicion', width: 12 },
+    { key: 'cliente', width: 22 },
+    { key: 'proyecto', width: 28 },
+    { key: 'fecha', width: 14 },
+    { key: 'comprobantes', width: 14 },
+    { key: 'total_ars', width: 20 },
+    { key: 'total_usd', width: 16 },
+  ];
+
+  const headerRow = ws.addRow(['Rendición', 'Cliente', 'Proyecto', 'Fecha', 'Comprobantes', 'Total ARS', 'Total USD']);
+  headerRow.eachCell(cell => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A2744' } };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  });
+
+  rendiciones.forEach(r => {
+    const fila = ws.addRow([
+      `${r.tipo}${r.numero}`,
+      r.cliente_nombre,
+      r.proyecto_nombre,
+      new Date(String(r.fecha).slice(0, 10) + 'T00:00:00').toLocaleDateString('es-AR'),
+      Number(r.cantidad_comprobantes || 0),
+      Number(r.total_ars),
+      Number(r.total_usd),
+    ]);
+    fila.getCell(6).numFmt = '$ #,##0.00';
+    fila.getCell(7).numFmt = 'U$S #,##0.00';
+  });
+
+  ws.addRow([]);
+  ws.addRow(['TOTALES DISCRIMINADOS']);
+  ws.lastRow.getCell(1).font = { bold: true, color: { argb: 'FF1A2744' } };
+
+  totales.forEach(t => {
+    ws.addRow([t.moneda === 'USD' ? 'U$S Dólares' : '$ Pesos argentinos']);
+    ws.lastRow.getCell(1).font = { bold: true };
+    const filaT = ws.addRow(['Neto', 'IVA', 'IIBB y otros', 'Total']);
+    filaT.eachCell(cell => { cell.font = { bold: true, color: { argb: 'FF666666' } }; });
+    const filaV = ws.addRow([Number(t.total_neto), Number(t.total_iva), Number(t.total_iibb), Number(t.total)]);
+    filaV.eachCell(cell => {
+      cell.numFmt = t.moneda === 'USD' ? 'U$S #,##0.00' : '$ #,##0.00';
+      cell.font = { bold: true, color: { argb: 'FF1A2744' } };
+    });
+    ws.addRow([]);
+  });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="resumen-rendiciones.xlsx"');
+  await wb.xlsx.write(res);
+  res.end();
+});
 
 module.exports = router;
