@@ -156,11 +156,10 @@ export default function Rendiciones() {
   const { rendiciones, cargando, error, crear, eliminar, obtenerSiguienteNumero } = useRendiciones(filtros);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (filtros.proyecto_id) params.set('proyecto_id', filtros.proyecto_id);
-    if (filtroTipo) params.set('tipo', filtroTipo);
-    get(`/rendiciones/totales?${params}`).then(setTotales).catch(() => {});
-  }, [filtros.proyecto_id, filtroTipo]);
+    if (!rendicionesFiltradas.length) { setTotales([]); return; }
+    const ids = rendicionesFiltradas.map(r => r.id).join(',');
+    get(`/rendiciones/totales?ids=${ids}`).then(setTotales).catch(() => {});
+  }, [rendicionesFiltradas.map(r => r.id).join(',')]);
 
   const prefijosDisponibles = [...new Set(
     rendiciones
