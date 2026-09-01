@@ -45,11 +45,10 @@ router.get('/siguiente-numero/calcular', async (req, res) => {
 
 // GET /api/rendiciones/totales
 router.get('/totales', async (req, res) => {
-  const { proyecto_id, tipo } = req.query;
-  const condiciones = ['TRUE'];
-  const params = [];
-  if (proyecto_id) { params.push(proyecto_id); condiciones.push(`r.proyecto_id = $${params.length}`); }
-  if (tipo)        { params.push(tipo);        condiciones.push(`r.tipo = $${params.length}`); }
+  const { ids } = req.query;
+  if (!ids) return res.json([]);
+  const idArray = ids.split(',').filter(Boolean);
+  if (!idArray.length) return res.json([]);
   const { rows } = await query(
     `SELECT
        rc.moneda,
@@ -58,10 +57,9 @@ router.get('/totales', async (req, res) => {
        COALESCE(SUM(rc.iibb), 0)        AS total_iibb,
        COALESCE(SUM(rc.monto_total), 0) AS total
      FROM rendicion_comprobantes rc
-     JOIN rendiciones r ON r.id = rc.rendicion_id
-     WHERE ${condiciones.join(' AND ')}
+     WHERE rc.rendicion_id = ANY($1)
      GROUP BY rc.moneda`,
-    params
+    [idArray]
   );
   res.json(rows);
 });
