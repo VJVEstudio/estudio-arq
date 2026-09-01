@@ -17,7 +17,6 @@ router.get('/', async (req, res) => {
   const params = [];
   if (proyecto_id) { params.push(proyecto_id); condiciones.push(`r.proyecto_id = $${params.length}`); }
   if (tipo)        { params.push(tipo);        condiciones.push(`r.tipo = $${params.length}`); }
-
   const { rows } = await query(
     `SELECT r.*, p.nombre AS proyecto_nombre, c.nombre_razon_social AS cliente_nombre,
             COALESCE((SELECT SUM(rc.monto_total) FROM rendicion_comprobantes rc WHERE rc.rendicion_id = r.id AND rc.moneda = 'ARS'), 0) AS total_ars,
@@ -33,7 +32,7 @@ router.get('/', async (req, res) => {
   res.json(rows);
 });
 
-// GET /api/rendiciones/siguiente-numero/calcular?proyecto_id=&tipo=
+// GET /api/rendiciones/siguiente-numero/calcular
 router.get('/siguiente-numero/calcular', async (req, res) => {
   const { proyecto_id, tipo } = req.query;
   if (!proyecto_id || !tipo) return res.status(400).json({ error: 'proyecto_id y tipo son obligatorios' });
@@ -44,7 +43,30 @@ router.get('/siguiente-numero/calcular', async (req, res) => {
   res.json({ siguiente: rows[0].siguiente });
 });
 
-// GET /api/rendiciones/:id (con sus comprobantes)
+// GET /api/rendiciones/totales
+router.get('/totales', async (req, res) => {
+  const { proyecto_id, tipo } = req.query;
+  const condiciones = ['TRUE'];
+  const params = [];
+  if (proyecto_id) { params.push(proyecto_id); condiciones.push(`r.proyecto_id = $${params.length}`); }
+  if (tipo)        { params.push(tipo);        condiciones.push(`r.tipo = $${params.length}`); }
+  const { rows } = await query(
+    `SELECT
+       rc.moneda,
+       COALESCE(SUM(rc.monto_neto), 0)  AS total_neto,
+       COALESCE(SUM(rc.iva), 0)         AS total_iva,
+       COALESCE(SUM(rc.iibb), 0)        AS total_iibb,
+       COALESCE(SUM(rc.monto_total), 0) AS total
+     FROM rendicion_comprobantes rc
+     JOIN rendiciones r ON r.id = rc.rendicion_id
+     WHERE ${condiciones.join(' AND ')}
+     GROUP BY rc.moneda`,
+    params
+  );
+  res.json(rows);
+});
+
+// GET /api/rendiciones/:id
 router.get('/:id', async (req, res) => {
   const { rows: [rendicion] } = await query(
     `SELECT r.*, p.nombre AS proyecto_nombre, c.nombre_razon_social AS cliente_nombre
@@ -55,12 +77,10 @@ router.get('/:id', async (req, res) => {
     [req.params.id]
   );
   if (!rendicion) return res.status(404).json({ error: 'Rendición no encontrada' });
-
   const { rows: comprobantes } = await query(
     `SELECT * FROM rendicion_comprobantes WHERE rendicion_id = $1 ORDER BY orden ASC, created_at ASC`,
     [req.params.id]
   );
-
   res.json({ ...rendicion, comprobantes });
 });
 
@@ -70,11 +90,9 @@ router.post('/', async (req, res) => {
   if (!proyecto_id) return res.status(400).json({ error: 'proyecto_id es obligatorio' });
   if (!tipo?.trim()) return res.status(400).json({ error: 'El tipo es obligatorio' });
   if (!fecha) return res.status(400).json({ error: 'La fecha es obligatoria' });
-
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
     await client.query(
       `SELECT id FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 FOR UPDATE`,
       [proyecto_id, tipo.trim().toUpperCase()]
@@ -84,7 +102,6 @@ router.post('/', async (req, res) => {
       [proyecto_id, tipo.trim().toUpperCase()]
     );
     const numero = numRows[0].siguiente;
-
     const { rows } = await client.query(
       `INSERT INTO rendiciones (proyecto_id, tipo, numero, fecha, notas, es_honorarios)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
@@ -122,7 +139,6 @@ router.delete('/:id', async (req, res) => {
 
 // ── Comprobantes ──────────────────────────────────────────────────────────────
 
-// POST /api/rendiciones/:id/comprobantes
 router.post('/:id/comprobantes', async (req, res) => {
   const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor, fecha, archivo_url } = req.body;
   if (!descripcion?.trim()) return res.status(400).json({ error: 'La descripción es obligatoria' });
@@ -130,12 +146,10 @@ router.post('/:id/comprobantes', async (req, res) => {
   const ivaNum = Number(iva || 0);
   const iibbNum = Number(iibb || 0);
   const total = neto + ivaNum + iibbNum;
-
   const { rows: ordenRows } = await query(
     `SELECT COALESCE(MAX(orden), 0) + 1 AS siguiente FROM rendicion_comprobantes WHERE rendicion_id = $1`,
     [req.params.id]
   );
-
   const { rows } = await query(
     `INSERT INTO rendicion_comprobantes
        (rendicion_id, orden, descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, monto_total, proveedor, fecha, archivo_url)
@@ -146,7 +160,6 @@ router.post('/:id/comprobantes', async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-// PUT /api/rendiciones/comprobantes/:comprobanteId
 router.put('/comprobantes/:comprobanteId', async (req, res) => {
   const { descripcion, numero_comprobante, moneda, monto_neto, iva, iibb, proveedor, fecha } = req.body;
   if (!descripcion?.trim()) return res.status(400).json({ error: 'La descripción es obligatoria' });
@@ -154,7 +167,6 @@ router.put('/comprobantes/:comprobanteId', async (req, res) => {
   const ivaNum = Number(iva || 0);
   const iibbNum = Number(iibb || 0);
   const total = neto + ivaNum + iibbNum;
-
   const { rows } = await query(
     `UPDATE rendicion_comprobantes
      SET descripcion=$1, numero_comprobante=$2, moneda=$3, monto_neto=$4, iva=$5, iibb=$6, monto_total=$7, proveedor=$8, fecha=$9
@@ -165,37 +177,33 @@ router.put('/comprobantes/:comprobanteId', async (req, res) => {
   res.json(rows[0]);
 });
 
-// DELETE /api/rendiciones/comprobantes/:comprobanteId
 router.delete('/comprobantes/:comprobanteId', async (req, res) => {
   const { rows } = await query(`DELETE FROM rendicion_comprobantes WHERE id=$1 RETURNING id`, [req.params.comprobanteId]);
   if (!rows[0]) return res.status(404).json({ error: 'Comprobante no encontrado' });
   res.status(204).send();
 });
-// POST /api/rendiciones/:id/comprobantes/ocr — sube un archivo y extrae los datos con OCR
+
 router.post('/:id/comprobantes/ocr', upload.single('archivo'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
-
   try {
     const { buffer, mimetype, originalname } = req.file;
-
     const tiposPermitidos = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     if (!tiposPermitidos.includes(mimetype)) {
       return res.status(400).json({ error: 'Formato no soportado. Usá JPG, PNG, WEBP o PDF.' });
     }
-
-    // Subir el archivo a Supabase Storage en paralelo con el OCR
     const [archivoUrl, datosExtraidos] = await Promise.all([
       subirArchivo(buffer, originalname, mimetype),
       leerComprobante(buffer, mimetype),
     ]);
-
     res.json({ ...datosExtraidos, archivo_url: archivoUrl });
   } catch (err) {
     console.error('Error procesando OCR:', err);
     res.status(500).json({ error: err.message || 'Error al procesar el comprobante' });
   }
 });
-// GET /api/rendiciones/:id/pdf
+
+// ── PDF ───────────────────────────────────────────────────────────────────────
+
 router.get('/:id/pdf', async (req, res) => {
   const { rows: [rendicion] } = await query(
     `SELECT r.*, p.nombre AS proyecto_nombre, c.nombre_razon_social AS cliente_nombre
@@ -206,7 +214,6 @@ router.get('/:id/pdf', async (req, res) => {
     [req.params.id]
   );
   if (!rendicion) return res.status(404).json({ error: 'Rendición no encontrada' });
-
   const { rows: comprobantes } = await query(
     `SELECT * FROM rendicion_comprobantes WHERE rendicion_id = $1 ORDER BY orden ASC, created_at ASC`,
     [req.params.id]
@@ -242,7 +249,6 @@ router.get('/:id/pdf', async (req, res) => {
 
   const margenIzq = 30;
   const anchoTotal = doc.page.width - 60;
-  // Columnas: Proveedor | Concepto | Fecha | Comprobante | Neto | IVA | IIBB y otros | Subtotal
   const cols = [
     { x: margenIzq,       w: 130, label: 'Proveedor',    align: 'left'  },
     { x: margenIzq + 130, w: 180, label: 'Concepto',     align: 'left'  },
@@ -254,15 +260,13 @@ router.get('/:id/pdf', async (req, res) => {
     { x: margenIzq + 685, w: anchoTotal - 685, label: 'Subtotal', align: 'right' },
   ];
 
-  // ── Encabezado ──
   doc.fontSize(13).font('Helvetica-Bold').fillColor('#000')
     .text(rendicion.cliente_nombre.toUpperCase(), margenIzq, 35);
   doc.moveDown(1);
   doc.fontSize(11).font('Helvetica').text('OBRA', margenIzq);
 
-  // Recuadro gris para el número de rendición, 10% más grande
   const numTexto = `${rendicion.tipo}${rendicion.numero}`;
-  doc.fontSize(24).font('Helvetica-Bold'); // ~10% más grande que el 22 anterior
+  doc.fontSize(24).font('Helvetica-Bold');
   const anchoNum = doc.widthOfString(numTexto) + 24;
   const altoNum = 34;
   const xNum = margenIzq + anchoTotal - anchoNum;
@@ -292,7 +296,7 @@ router.get('/:id/pdf', async (req, res) => {
   const altoFila = 22;
   const altoEncabezado = 18;
 
-const dibujarEncabezadoColumnas = (y) => {
+  const dibujarEncabezadoColumnas = (y) => {
     doc.rect(margenIzq, y, anchoTotal, altoEncabezado).fillAndStroke('#404040', '#404040');
     cols.forEach(c => {
       doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold')
@@ -319,29 +323,23 @@ const dibujarEncabezadoColumnas = (y) => {
     lista.forEach((c) => {
       if (y > 740) { doc.addPage(); y = 35; y = dibujarEncabezadoColumnas(y); }
       const fondo = obtenerColor(c.proveedor);
-
       doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke(fondo, '#bbb');
       cols.slice(1).forEach(c2 => {
         doc.moveTo(c2.x, y).lineTo(c2.x, y + altoFila).strokeColor('#bbb').stroke();
       });
-
-const esNegativo = Number(c.monto_total) < 0;
+      const esNegativo = Number(c.monto_total) < 0;
       doc.fillColor('#000').fontSize(8).font('Helvetica');
       doc.text(c.proveedor || '—', cols[0].x + 4, y + 6, { width: cols[0].w - 8, ellipsis: true });
       doc.text(c.descripcion, cols[1].x + 4, y + 6, { width: cols[1].w - 8, ellipsis: true });
       doc.text(fmtFecha(c.fecha), cols[2].x + 2, y + 6, { width: cols[2].w - 4, align: 'right' });
       doc.text(c.numero_comprobante || '', cols[3].x + 2, y + 6, { width: cols[3].w - 4, align: 'right' });
-
       doc.fillColor(esNegativo ? '#c00000' : '#000');
       doc.text(fmtMonto(c.monto_neto, moneda), cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
-
       doc.fillColor('#000');
       doc.text(Number(c.iva) !== 0 ? fmtMonto(c.iva, moneda) : '', cols[5].x, y + 6, { width: cols[5].w - 6, align: 'right' });
       doc.text(Number(c.iibb) !== 0 ? fmtMonto(c.iibb, moneda) : '', cols[6].x, y + 6, { width: cols[6].w - 6, align: 'right' });
-
       doc.fillColor(esNegativo ? '#c00000' : '#000').font('Helvetica-Bold');
       doc.text(fmtMonto(c.monto_total, moneda), cols[7].x, y + 6, { width: cols[7].w - 6, align: 'right' });
-
       y += altoFila;
     });
 
@@ -355,15 +353,14 @@ const esNegativo = Number(c.monto_total) < 0;
     doc.rect(cols[7].x, y, cols[7].w, altoFila).fillAndStroke('#d9d9d9', '#bbb');
     doc.fillColor('#000');
     doc.text(fmtMonto(total, moneda), cols[7].x, y + 6, { width: cols[7].w - 6, align: 'right' });
-
     y += altoFila + 16;
   });
 
   doc.end();
 });
-// ── RHDT: Rendición de Honorarios DT ─────────────────────────────────────────
 
-// GET /api/rendiciones/:id/honorarios
+// ── Honorarios DT/HP ──────────────────────────────────────────────────────────
+
 router.get('/:id/honorarios', async (req, res) => {
   const { rows: bases } = await query(
     `SELECT rhb.id, rhb.rendicion_base_id,
@@ -376,46 +373,38 @@ router.get('/:id/honorarios', async (req, res) => {
     [req.params.id]
   );
   const { rows: socios } = await query(
-    `SELECT * FROM rendicion_honorarios_socios
-     WHERE rendicion_id = $1 ORDER BY orden ASC`,
+    `SELECT * FROM rendicion_honorarios_socios WHERE rendicion_id = $1 ORDER BY orden ASC`,
     [req.params.id]
   );
   res.json({ bases, socios });
 });
 
-// POST /api/rendiciones/:id/honorarios/base — agregar una rendición base
 router.post('/:id/honorarios/base', async (req, res) => {
   const { rendicion_base_id } = req.body;
   if (!rendicion_base_id) return res.status(400).json({ error: 'rendicion_base_id es obligatorio' });
   const { rows } = await query(
-    `INSERT INTO rendicion_honorarios_base (rendicion_id, rendicion_base_id)
-     VALUES ($1, $2) RETURNING *`,
+    `INSERT INTO rendicion_honorarios_base (rendicion_id, rendicion_base_id) VALUES ($1, $2) RETURNING *`,
     [req.params.id, rendicion_base_id]
   );
   res.status(201).json(rows[0]);
 });
 
-// DELETE /api/rendiciones/honorarios/base/:id
 router.delete('/honorarios/base/:id', async (req, res) => {
   await query(`DELETE FROM rendicion_honorarios_base WHERE id=$1`, [req.params.id]);
   res.status(204).send();
 });
 
-// POST /api/rendiciones/:id/honorarios/socios — agregar un socio
 router.post('/:id/honorarios/socios', async (req, res) => {
   const { nombre, porcentaje, aplica_iva, honorario_total } = req.body;
   if (!nombre?.trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
-
   const honorarioTotal = Number(honorario_total || 0);
   const monto_neto = Math.round(honorarioTotal * Number(porcentaje) / 100 * 100) / 100;
   const monto_iva = aplica_iva ? Math.round(monto_neto * 0.21 * 100) / 100 : 0;
   const monto_total = monto_neto + monto_iva;
-
   const { rows: ordenRows } = await query(
     `SELECT COALESCE(MAX(orden), 0) + 1 AS siguiente FROM rendicion_honorarios_socios WHERE rendicion_id = $1`,
     [req.params.id]
   );
-
   const { rows } = await query(
     `INSERT INTO rendicion_honorarios_socios
        (rendicion_id, nombre, porcentaje, aplica_iva, monto_neto, monto_iva, monto_total, orden)
@@ -426,20 +415,16 @@ router.post('/:id/honorarios/socios', async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-// DELETE /api/rendiciones/honorarios/socios/:id
 router.delete('/honorarios/socios/:id', async (req, res) => {
   await query(`DELETE FROM rendicion_honorarios_socios WHERE id=$1`, [req.params.id]);
   res.status(204).send();
 });
 
-// PUT /api/rendiciones/:id/honorarios/calcular — recalcular todo al cambiar % o bases
 router.put('/:id/honorarios/calcular', async (req, res) => {
   const { porcentaje_honorarios } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    // Calcular el total base sumando todas las rendiciones vinculadas
     const { rows: bases } = await client.query(
       `SELECT COALESCE(SUM(
          (SELECT COALESCE(SUM(rc.monto_total), 0)
@@ -453,14 +438,10 @@ router.put('/:id/honorarios/calcular', async (req, res) => {
     const totalBase = Number(bases[0].total);
     const pct = Number(porcentaje_honorarios);
     const honorarioTotal = totalBase * pct / 100;
-
-    // Actualizar la rendición con el total base y el porcentaje
     await client.query(
       `UPDATE rendiciones SET porcentaje_honorarios=$1, total_base=$2 WHERE id=$3`,
       [pct, totalBase, req.params.id]
     );
-
-    // Recalcular cada socio
     const { rows: socios } = await client.query(
       `SELECT * FROM rendicion_honorarios_socios WHERE rendicion_id=$1 ORDER BY orden ASC`,
       [req.params.id]
@@ -474,7 +455,6 @@ router.put('/:id/honorarios/calcular', async (req, res) => {
         [monto_neto, monto_iva, monto_total, s.id]
       );
     }
-
     await client.query('COMMIT');
     res.json({ total_base: totalBase, honorario_total: honorarioTotal });
   } catch (err) {
@@ -485,27 +465,5 @@ router.put('/:id/honorarios/calcular', async (req, res) => {
     client.release();
   }
 });
-// GET /api/rendiciones/totales?proyecto_id=&tipo=
-router.get('/totales', async (req, res) => {
-  const { proyecto_id, tipo } = req.query;
-  const condiciones = ['TRUE'];
-  const params = [];
-  if (proyecto_id) { params.push(proyecto_id); condiciones.push(`r.proyecto_id = $${params.length}`); }
-  if (tipo)        { params.push(tipo);        condiciones.push(`r.tipo = $${params.length}`); }
 
-  const { rows } = await query(
-    `SELECT
-       rc.moneda,
-       COALESCE(SUM(rc.monto_neto), 0)   AS total_neto,
-       COALESCE(SUM(rc.iva), 0)          AS total_iva,
-       COALESCE(SUM(rc.iibb), 0)         AS total_iibb,
-       COALESCE(SUM(rc.monto_total), 0)  AS total
-     FROM rendicion_comprobantes rc
-     JOIN rendiciones r ON r.id = rc.rendicion_id
-     WHERE ${condiciones.join(' AND ')}
-     GROUP BY rc.moneda`,
-    params
-  );
-  res.json(rows);
-});
 module.exports = router;
