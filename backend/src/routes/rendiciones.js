@@ -9,7 +9,10 @@ const { leerComprobante } = require('../utils/ocrComprobante');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
-
+// GET /api/rendiciones/exportar/pdf?ids=...
+router.get('/exportar/pdf', async (req, res) => {
+// GET /api/rendiciones/exportar/excel?ids=...
+router.get('/exportar/excel', async (req, res) => {
 // GET /api/rendiciones?proyecto_id=&tipo=
 router.get('/', async (req, res) => {
   const { proyecto_id, tipo } = req.query;
@@ -463,8 +466,7 @@ router.put('/:id/honorarios/calcular', async (req, res) => {
     client.release();
   }
 });
-// GET /api/rendiciones/exportar/pdf?ids=...
-router.get('/exportar/pdf', async (req, res) => {
+
   const { ids } = req.query;
   if (!ids) return res.status(400).json({ error: 'ids es obligatorio' });
   const idArray = ids.split(',').filter(Boolean);
@@ -586,8 +588,7 @@ router.get('/exportar/pdf', async (req, res) => {
   doc.end();
 });
 
-// GET /api/rendiciones/exportar/excel?ids=...
-router.get('/exportar/excel', async (req, res) => {
+
   const ExcelJS = require('exceljs');
   const { ids } = req.query;
   if (!ids) return res.status(400).json({ error: 'ids es obligatorio' });
