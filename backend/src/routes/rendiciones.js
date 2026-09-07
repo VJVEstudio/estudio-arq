@@ -434,7 +434,7 @@ router.get('/:id/pdf', async (req, res) => {
 
   doc.fontSize(13).font('Helvetica-Bold').fillColor('#000').text(rendicion.cliente_nombre.toUpperCase(), margenIzq, 35);
   doc.moveDown(1);
-  doc.fontSize(11).font('Helvetica').text(rendicion.proyecto_nombre, margenIzq);
+  doc.fontSize(11).font('Helvetica').text(`OBRA: ${rendicion.proyecto_nombre}`, margenIzq);
   const numTexto = `${rendicion.tipo}${rendicion.numero}`;
   doc.fontSize(24).font('Helvetica-Bold');
   const anchoNum = doc.widthOfString(numTexto) + 24;
