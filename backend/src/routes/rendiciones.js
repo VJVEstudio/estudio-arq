@@ -477,24 +477,31 @@ router.get('/:id/pdf', async (req, res) => {
       y += altoFila;
     }
     lista.forEach((c) => {
-      if (y > 740) { doc.addPage(); y = 35; y = dibujarEncabezadoColumnas(y); }
+      // Calcular altura dinámica según el contenido más largo
+      doc.fontSize(8).font('Helvetica');
+      const altoConcepto = doc.heightOfString(c.descripcion || '', { width: cols[1].w - 8 });
+      const altoProveedor = doc.heightOfString(c.proveedor || '—', { width: cols[0].w - 8 });
+      const altoFilaDinamico = Math.max(altoConcepto, altoProveedor, 14) + 10;
+
+      if (y + altoFilaDinamico > 740) { doc.addPage(); y = 35; y = dibujarEncabezadoColumnas(y); }
       const fondo = obtenerColor(c.proveedor);
-      doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke(fondo, '#bbb');
-      cols.slice(1).forEach(c2 => { doc.moveTo(c2.x, y).lineTo(c2.x, y + altoFila).strokeColor('#bbb').stroke(); });
+      doc.rect(margenIzq, y, anchoTotal, altoFilaDinamico).fillAndStroke(fondo, '#bbb');
+      cols.slice(1).forEach(c2 => { doc.moveTo(c2.x, y).lineTo(c2.x, y + altoFilaDinamico).strokeColor('#bbb').stroke(); });
       const esNegativo = Number(c.monto_total) < 0;
       doc.fillColor('#000').fontSize(8).font('Helvetica');
-      doc.text(c.proveedor || '—', cols[0].x + 4, y + 6, { width: cols[0].w - 8, ellipsis: true });
-      doc.text(c.descripcion, cols[1].x + 4, y + 6, { width: cols[1].w - 8, ellipsis: true });
-      doc.text(fmtFecha(c.fecha), cols[2].x + 2, y + 6, { width: cols[2].w - 4, align: 'right' });
-      doc.text(c.numero_comprobante || '', cols[3].x + 2, y + 6, { width: cols[3].w - 4, align: 'right' });
+      doc.text(c.proveedor || '—', cols[0].x + 4, y + 5, { width: cols[0].w - 8 });
+      doc.text(c.descripcion, cols[1].x + 4, y + 5, { width: cols[1].w - 8 });
+      const yCentro = y + altoFilaDinamico / 2 - 5;
+      doc.text(fmtFecha(c.fecha), cols[2].x + 2, yCentro, { width: cols[2].w - 4, align: 'right' });
+      doc.text(c.numero_comprobante || '', cols[3].x + 2, yCentro, { width: cols[3].w - 4, align: 'right' });
       doc.fillColor(esNegativo ? '#c00000' : '#000');
-      doc.text(fmtMonto(c.monto_neto, moneda), cols[4].x, y + 6, { width: cols[4].w - 6, align: 'right' });
+      doc.text(fmtMonto(c.monto_neto, moneda), cols[4].x, yCentro, { width: cols[4].w - 6, align: 'right' });
       doc.fillColor('#000');
-      doc.text(Number(c.iva) !== 0 ? fmtMonto(c.iva, moneda) : '', cols[5].x, y + 6, { width: cols[5].w - 6, align: 'right' });
-      doc.text(Number(c.iibb) !== 0 ? fmtMonto(c.iibb, moneda) : '', cols[6].x, y + 6, { width: cols[6].w - 6, align: 'right' });
+      doc.text(Number(c.iva) !== 0 ? fmtMonto(c.iva, moneda) : '', cols[5].x, yCentro, { width: cols[5].w - 6, align: 'right' });
+      doc.text(Number(c.iibb) !== 0 ? fmtMonto(c.iibb, moneda) : '', cols[6].x, yCentro, { width: cols[6].w - 6, align: 'right' });
       doc.fillColor(esNegativo ? '#c00000' : '#000').font('Helvetica-Bold');
-      doc.text(fmtMonto(c.monto_total, moneda), cols[7].x, y + 6, { width: cols[7].w - 6, align: 'right' });
-      y += altoFila;
+      doc.text(fmtMonto(c.monto_total, moneda), cols[7].x, yCentro, { width: cols[7].w - 6, align: 'right' });
+      y += altoFilaDinamico;
     });
     const total = lista.reduce((s, c) => s + Number(c.monto_total), 0);
     doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke('#fff', '#bbb');
