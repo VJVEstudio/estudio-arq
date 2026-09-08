@@ -191,7 +191,8 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   const { rows } = await query(
     `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
-            SUM(h.horas) AS horas_totales, SUM(h.horas * d.tarifa_hora_base) AS costo_total
+            SUM(h.horas) AS horas_totales, SUM(h.horas * d.tarifa_hora_base) AS costo_total,
+            MAX(CASE WHEN d.monotributo_activo THEN d.monotributo_monto ELSE 0 END) AS monotributo
      FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
@@ -206,6 +207,7 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
     if (!porDibujante[r.dibujante_id]) {
       porDibujante[r.dibujante_id] = {
         nombre: r.dibujante_nombre, tarifa: r.tarifa_actual,
+        monotributo: r.monotributo || 0,
         proyectos: [], horasTotal: 0, costoTotal: 0,
       };
     }
@@ -244,10 +246,13 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
     doc.text(g.nombre, 48, yInicio + 6, { width: 220, continued: false });
     doc.font('Helvetica').fontSize(9).fillColor('#666');
     doc.text(`Tarifa actual: ${moneyFmt(g.tarifa)}/h`, 270, yInicio + 8);
+    if (Number(g.monotributo) > 0) {
+      doc.text(`Monotributo: ${moneyFmt(g.monotributo)}/mes`, 400, yInicio + 8);
+    }
     doc.fontSize(10).fillColor('#1a1a1a');
     doc.text(`${g.horasTotal.toFixed(1)} h totales`, 420, yInicio + 7, { width: 90, align: 'right' });
     doc.fillColor('#b71c1c').font('Helvetica-Bold');
-    doc.text(moneyFmt(g.costoTotal), 480, yInicio + 7, { width: 95, align: 'right' });
+    doc.text(moneyFmt(Number(g.costoTotal) + Number(g.monotributo || 0)), 480, yInicio + 7, { width: 95, align: 'right' });
     doc.font('Helvetica');
 
     let y = yInicio + 24;
