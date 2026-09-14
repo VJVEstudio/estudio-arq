@@ -13,6 +13,7 @@ router.get('/proyecto/:id', async (req, res) => {
      FROM proyectos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1`, [id]
   );
   if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado' });
+
   const { rows: ingresos } = await query(
     `SELECT i.fecha, i.monto, i.moneda, i.tipo, i.comprobante, i.descripcion,
             i.es_del_estudio, i.cotizacion_dolar, s.nombre AS socio_nombre,
@@ -24,47 +25,55 @@ router.get('/proyecto/:id', async (req, res) => {
      LEFT JOIN socios sc ON sc.id = isc.socio_id
      WHERE i.proyecto_id = $1 GROUP BY i.id, s.nombre ORDER BY i.fecha ASC`, [id]
   );
+
+  // Egresos directos: excluye categoría 'dibujantes' para evitar doble conteo con horas
   const { rows: egresos } = await query(
     `SELECT e.fecha, e.monto, e.moneda, e.categoria, e.comprobante, e.descripcion,
             e.pagado_por_estudio, e.cotizacion_dolar, d.nombre AS destinatario_nombre, s.nombre AS socio_nombre
      FROM egresos e
      JOIN destinatarios d ON d.id = e.destinatario_id
      LEFT JOIN socios s ON s.id = e.socio_id
-     WHERE e.proyecto_id = $1 ORDER BY e.fecha ASC`, [id]
+     WHERE e.proyecto_id = $1 AND e.categoria != 'dibujantes' ORDER BY e.fecha ASC`, [id]
   );
+
+  // Horas con tarifa actual del dibujante (no histórica)
   const { rows: horas } = await query(
     `SELECT h.fecha, h.horas, h.tarifa_aplicada, h.costo_total, h.descripcion_tarea,
-            d.nombre AS dibujante_nombre
+            d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
+            (h.horas * d.tarifa_hora_base) AS costo_actual
      FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id
      WHERE h.proyecto_id = $1 ORDER BY h.fecha ASC`, [id]
   );
+
   const totales = { ARS: { ingresos: 0, egresos: 0 }, USD: { ingresos: 0, egresos: 0 } };
   ingresos.forEach(i => { totales[i.moneda].ingresos += Number(i.monto); });
   egresos.forEach(e => { totales[e.moneda].egresos += Number(e.monto); });
-  const costoHoras = horas.reduce((s, h) => s + Number(h.costo_total), 0);
+
+  // Costo de horas usando tarifa actual
+  const costoHoras = horas.reduce((s, h) => s + Number(h.costo_actual), 0);
   const horasTotales = horas.reduce((s, h) => s + Number(h.horas), 0);
+
   const porDibujante = {};
   horas.forEach(h => {
     if (!porDibujante[h.dibujante_nombre]) porDibujante[h.dibujante_nombre] = { horas: 0, costo: 0 };
     porDibujante[h.dibujante_nombre].horas += Number(h.horas);
-    porDibujante[h.dibujante_nombre].costo += Number(h.costo_total);
+    porDibujante[h.dibujante_nombre].costo += Number(h.costo_actual);
   });
-const timeline = [
+
+  const timeline = [
     ...ingresos.map(i => ({ ...i, fecha: i.fecha, tipo: 'ingreso' })),
     ...egresos.map(e => ({ ...e, fecha: e.fecha, tipo: 'egreso' })),
     ...horas.map(h => ({ ...h, fecha: h.fecha, tipo: 'horas' })),
   ].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
 
-  // Resultado total en pesos usando la cotización guardada de cada registro en USD
   const cotizacionActual = await obtenerCotizacionOficial();
-  let resultadoTotalConvertido = totales.ARS.ingresos - totales.ARS.egresos;
+  let resultadoTotalConvertido = totales.ARS.ingresos - totales.ARS.egresos - costoHoras;
   ingresos.filter(i => i.moneda === 'USD').forEach(i => {
     resultadoTotalConvertido += Number(i.monto) * Number(i.cotizacion_dolar || cotizacionActual);
   });
   egresos.filter(e => e.moneda === 'USD').forEach(e => {
     resultadoTotalConvertido -= Number(e.monto) * Number(e.cotizacion_dolar || cotizacionActual);
   });
-  resultadoTotalConvertido -= costoHoras;
 
   res.json({
     proyecto, ingresos, egresos, horas,
@@ -92,11 +101,12 @@ router.get('/proyecto/:id/csv', async (req, res) => {
   const { rows: egresos } = await query(
     `SELECT e.fecha, 'Egreso' AS tipo, d.nombre AS contraparte,
             e.moneda, e.monto, e.categoria AS subtipo, e.comprobante, e.descripcion
-     FROM egresos e JOIN destinatarios d ON d.id=e.destinatario_id WHERE e.proyecto_id=$1`, [id]
+     FROM egresos e JOIN destinatarios d ON d.id=e.destinatario_id
+     WHERE e.proyecto_id=$1 AND e.categoria != 'dibujantes'`, [id]
   );
   const { rows: horas } = await query(
     `SELECT h.fecha, 'Horas' AS tipo, d.nombre AS contraparte,
-            'ARS' AS moneda, h.costo_total AS monto,
+            'ARS' AS moneda, (h.horas * d.tarifa_hora_base) AS monto,
             CONCAT(h.horas, ' hs') AS subtipo, '' AS comprobante, h.descripcion_tarea AS descripcion
      FROM horas_dibujantes h JOIN dibujantes d ON d.id=h.dibujante_id WHERE h.proyecto_id=$1`, [id]
   );
@@ -141,18 +151,20 @@ router.get('/general', async (req, res) => {
      FROM ingresos WHERE TRUE ${condI}
      GROUP BY moneda, tipo ORDER BY moneda, tipo`
   );
-    const { rows: egresosResumen } = await query(
+
+  const { rows: egresosResumen } = await query(
     `SELECT moneda, categoria, COUNT(*) AS cantidad, SUM(monto) AS total
      FROM egresos WHERE TRUE AND categoria != 'dibujantes' ${condE}
      GROUP BY moneda, categoria ORDER BY moneda, total DESC`
   );
+
   const { rows: porProyecto } = await query(
     `SELECT p.id, p.nombre AS proyecto, c.nombre_razon_social AS cliente, p.estado,
             COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'ARS' ${condI}), 0) AS ingresos_ars,
             COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'USD' ${condI}), 0) AS ingresos_usd,
-            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'ARS' AND e2.categoria != 'dibujantes' ${condE}), 0) AS egresos_ars,          
+            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'ARS' AND e2.categoria != 'dibujantes' ${condE}), 0) AS egresos_ars,
             COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'USD' AND e2.categoria != 'dibujantes' ${condE}), 0) AS egresos_usd,
-            COALESCE((SELECT SUM(h2.costo_total) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS costo_horas,
+            COALESCE((SELECT SUM(h2.horas * d2.tarifa_hora_base) FROM horas_dibujantes h2 JOIN dibujantes d2 ON d2.id = h2.dibujante_id WHERE h2.proyecto_id = p.id ${condH}), 0) AS costo_horas,
             COALESCE((SELECT SUM(h2.horas) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS horas_totales,
             COALESCE((
               SELECT SUM(i3.monto * COALESCE(i3.cotizacion_dolar, ${cotizacionActual}))
@@ -167,6 +179,7 @@ router.get('/general', async (req, res) => {
      GROUP BY p.id, p.nombre, c.nombre_razon_social, p.estado
      ORDER BY ingresos_ars DESC`
   );
+
   const { rows: porCliente } = await query(
     `SELECT c.nombre_razon_social AS cliente,
             SUM(i.monto) FILTER (WHERE i.moneda='ARS') AS total_ars,
@@ -176,6 +189,7 @@ router.get('/general', async (req, res) => {
      WHERE TRUE ${condI}
      GROUP BY c.id, c.nombre_razon_social ORDER BY total_ars DESC NULLS LAST`
   );
+
   const { rows: porDibujante } = await query(
     `SELECT d.nombre AS dibujante,
             SUM(h.horas) AS horas_totales,
@@ -187,6 +201,7 @@ router.get('/general', async (req, res) => {
      WHERE TRUE ${condH}
      GROUP BY d.id, d.nombre ORDER BY horas_totales DESC`
   );
+
   const { rows: balanceSocios } = await query(`SELECT * FROM v_balance_socios`);
 
   res.json({
@@ -223,7 +238,7 @@ router.get('/general/csv', async (req, res) => {
             e.comprobante, e.descripcion
      FROM egresos e JOIN destinatarios d ON d.id=e.destinatario_id
      LEFT JOIN proyectos p ON p.id=e.proyecto_id
-     WHERE TRUE ${whereE}`
+     WHERE TRUE AND e.categoria != 'dibujantes' ${whereE}`
   );
   const filas = [...ingresos, ...egresos].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   const enc = ['Fecha','Tipo','Cliente/Destinatario','Proyecto','Moneda','Monto','Subtipo','Comprobante','Descripción'];
