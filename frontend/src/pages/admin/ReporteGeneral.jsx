@@ -95,7 +95,7 @@ function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
           <thead>
             <tr>
-              {['Proyecto', 'Cliente', 'Estado', 'Ingresos ARS', 'Egresos ARS', 'Ingresos USD', 'Egresos USD', 'Resultado total ($)', 'Horas', ''].map(h => (
+                          {['Proyecto', 'Cliente', 'Estado', 'Ingresos ARS', 'Egresos ARS', 'Costo dibujantes', 'Ingresos USD', 'Egresos USD', 'Resultado total ($)', 'Horas', ''].map(h => (
                 <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: '#666', borderBottom: '1px solid #e0e0e0', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -122,6 +122,7 @@ function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
                     </td>
                     <td style={{ padding: '10px 14px', color: '#1b5e20', whiteSpace: 'nowrap' }}>{fmt(p.ingresos_ars)}</td>
                     <td style={{ padding: '10px 14px', color: '#b71c1c', whiteSpace: 'nowrap' }}>{fmt(p.egresos_ars)}</td>
+                    <td style={{ padding: '10px 14px', color: '#e65100', whiteSpace: 'nowrap' }}>{Number(p.costo_horas) > 0 ? fmt(p.costo_horas) : '—'}</td>
                     <td style={{ padding: '10px 14px', color: '#0d47a1', whiteSpace: 'nowrap' }}>{fmt(p.ingresos_usd, 'USD')}</td>
                     <td style={{ padding: '10px 14px', color: '#880e4f', whiteSpace: 'nowrap' }}>{fmt(p.egresos_usd, 'USD')}</td>
                     <td style={{ padding: '10px 14px', fontWeight: 700, color: resultadoTotalArs >= 0 ? '#1b5e20' : '#b71c1c', whiteSpace: 'nowrap' }}>
