@@ -145,15 +145,29 @@ function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
 function TablaDibujantes({ dibujantes }) {
   if (!dibujantes.length) return null;
   const maxHoras = Math.max(...dibujantes.map(d => Number(d.horas_totales)), 1);
+  const totalLiquidado = dibujantes.reduce((s, d) => s + Number(d.costo_liquidado || 0), 0);
+  const totalPendiente = dibujantes.reduce((s, d) => s + Number(d.costo_pendiente || 0), 0);
   return (
     <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '20px 24px', marginBottom: '20px' }}>
-      <p style={{ margin: '0 0 16px', fontWeight: 500 }}>Horas y costos por dibujante</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <p style={{ margin: 0, fontWeight: 500 }}>Horas y costos por dibujante</p>
+        <div style={{ display: 'flex', gap: '20px', fontSize: '13px' }}>
+          <span>Liquidado: <strong style={{ color: '#1b5e20' }}>{fmt(totalLiquidado)}</strong></span>
+          <span>Pendiente: <strong style={{ color: '#f57f17' }}>{fmt(totalPendiente)}</strong></span>
+        </div>
+      </div>
       {dibujantes.map(d => (
         <div key={d.dibujante} style={{ marginBottom: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
             <span style={{ fontWeight: 500 }}>{d.dibujante}</span>
-            <div>
-              <span style={{ color: '#666', marginRight: '16px' }}>{fmtH(d.horas_totales)}</span>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <span style={{ color: '#666' }}>{fmtH(d.horas_totales)}</span>
+              {Number(d.costo_liquidado) > 0 && (
+                <span style={{ fontSize: '12px', color: '#1b5e20' }}>✓ {fmt(d.costo_liquidado)}</span>
+              )}
+              {Number(d.costo_pendiente) > 0 && (
+                <span style={{ fontSize: '12px', color: '#f57f17' }}>⏳ {fmt(d.costo_pendiente)}</span>
+              )}
               <span style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(d.costo_total)}</span>
             </div>
           </div>
