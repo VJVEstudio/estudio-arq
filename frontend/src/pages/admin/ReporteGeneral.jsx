@@ -37,7 +37,7 @@ function TarjetasTotales({ ingresos, egresos, porProyecto }) {
   }, 0);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '10px', marginBottom: '28px' }}>
       {[
         { label: 'Ingresos ARS',       valor: fmt(tot.ARS.ing, 'ARS'), color: '#1b5e20' },
         { label: 'Egresos ARS',        valor: fmt(tot.ARS.egr, 'ARS'), color: '#b71c1c' },
