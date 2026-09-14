@@ -29,7 +29,7 @@ function TarjetasTotales({ ingresos, egresos, porProyecto }) {
   egresos.forEach(r =>  { tot[r.moneda].egr += Number(r.total); });
 
   const resultadoTotalConvertido = (porProyecto || []).reduce((acc, p) => {
-    const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars);
+    const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars) - Number(p.costo_horas || 0);
     const usdConvertido = Number(p.ingresos_usd_convertido || 0) - Number(p.egresos_usd_convertido || 0);
     return acc + resultadoArs + usdConvertido;
   }, 0);
@@ -104,7 +104,7 @@ function TablaPorProyecto({ proyectos, onVerReporte, cotizacion }) {
             {proyectos.length === 0
               ? <tr><td colSpan={10} style={{ padding: '24px', textAlign: 'center', color: '#999' }}>Sin proyectos en este período</td></tr>
               : proyectos.map(p => {
-                const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars);
+                const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars) - Number(p.costo_horas || 0);
                 const usdConvertido = Number(p.ingresos_usd_convertido || 0) - Number(p.egresos_usd_convertido || 0);
                 const resultadoTotalArs = resultadoArs + usdConvertido;
                 return (
