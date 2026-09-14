@@ -141,9 +141,9 @@ router.get('/general', async (req, res) => {
      FROM ingresos WHERE TRUE ${condI}
      GROUP BY moneda, tipo ORDER BY moneda, tipo`
   );
-  const { rows: egresosResumen } = await query(
+    const { rows: egresosResumen } = await query(
     `SELECT moneda, categoria, COUNT(*) AS cantidad, SUM(monto) AS total
-     FROM egresos WHERE TRUE ${condE}
+     FROM egresos WHERE TRUE AND categoria != 'dibujantes' ${condE}
      GROUP BY moneda, categoria ORDER BY moneda, total DESC`
   );
   const { rows: porProyecto } = await query(
