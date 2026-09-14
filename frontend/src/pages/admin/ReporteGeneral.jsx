@@ -28,6 +28,8 @@ function TarjetasTotales({ ingresos, egresos, porProyecto }) {
   ingresos.forEach(r => { tot[r.moneda].ing += Number(r.total); });
   egresos.forEach(r =>  { tot[r.moneda].egr += Number(r.total); });
 
+  const costoDibujantes = (porProyecto || []).reduce((s, p) => s + Number(p.costo_horas || 0), 0);
+
   const resultadoTotalConvertido = (porProyecto || []).reduce((acc, p) => {
     const resultadoArs = Number(p.ingresos_ars) - Number(p.egresos_ars) - Number(p.costo_horas || 0);
     const usdConvertido = Number(p.ingresos_usd_convertido || 0) - Number(p.egresos_usd_convertido || 0);
@@ -37,12 +39,13 @@ function TarjetasTotales({ ingresos, egresos, porProyecto }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '28px' }}>
       {[
-        { label: 'Ingresos ARS',  valor: fmt(tot.ARS.ing, 'ARS'), color: '#1b5e20' },
-        { label: 'Egresos ARS',   valor: fmt(tot.ARS.egr, 'ARS'), color: '#b71c1c' },
-        { label: 'Resultado ARS', valor: fmt(tot.ARS.ing - tot.ARS.egr, 'ARS'), color: tot.ARS.ing - tot.ARS.egr >= 0 ? '#1b5e20' : '#b71c1c' },
-        { label: 'Ingresos USD',  valor: fmt(tot.USD.ing, 'USD'), color: '#0d47a1' },
-        { label: 'Egresos USD',   valor: fmt(tot.USD.egr, 'USD'), color: '#880e4f' },
-        { label: 'Resultado USD', valor: fmt(tot.USD.ing - tot.USD.egr, 'USD'), color: tot.USD.ing - tot.USD.egr >= 0 ? '#0d47a1' : '#880e4f' },
+        { label: 'Ingresos ARS',       valor: fmt(tot.ARS.ing, 'ARS'), color: '#1b5e20' },
+        { label: 'Egresos ARS',        valor: fmt(tot.ARS.egr, 'ARS'), color: '#b71c1c' },
+        { label: 'Costo dibujantes',   valor: fmt(costoDibujantes, 'ARS'), color: '#e65100' },
+        { label: 'Resultado ARS',      valor: fmt(tot.ARS.ing - tot.ARS.egr - costoDibujantes, 'ARS'), color: tot.ARS.ing - tot.ARS.egr - costoDibujantes >= 0 ? '#1b5e20' : '#b71c1c' },
+        { label: 'Ingresos USD',       valor: fmt(tot.USD.ing, 'USD'), color: '#0d47a1' },
+        { label: 'Egresos USD',        valor: fmt(tot.USD.egr, 'USD'), color: '#880e4f' },
+        { label: 'Resultado USD',      valor: fmt(tot.USD.ing - tot.USD.egr, 'USD'), color: tot.USD.ing - tot.USD.egr >= 0 ? '#0d47a1' : '#880e4f' },
         { label: 'Resultado total ($)', valor: fmt(resultadoTotalConvertido, 'ARS'), color: resultadoTotalConvertido >= 0 ? '#1b5e20' : '#b71c1c' },
       ].map(t => (
         <div key={t.label} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 18px' }}>
