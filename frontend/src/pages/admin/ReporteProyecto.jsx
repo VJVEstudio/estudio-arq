@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { get } from '../../lib/api';
+import { get, getAccessToken } from '../../lib/api';
 import { AlertaError, Boton, Select } from '../../components/ui';
 
 const AZUL = '#1a2744';
@@ -145,7 +145,16 @@ export default function ReporteProyecto() {
               {proyecto.fecha_cierre_estimada && ` · Cierre estimado: ${fmtF(proyecto.fecha_cierre_estimada)}`}
             </p>
           </div>
-          <Boton onClick={() => window.open(`${BASE}/reportes/proyecto/${id}/csv`, '_blank')}>⬇ Exportar CSV</Boton>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Boton variante="secundario" onClick={() => {
+              const token = getAccessToken();
+              window.open(`${BASE}/reportes/proyecto/${id}/csv?token=${token}`, '_blank');
+            }}>⬇ CSV</Boton>
+            <Boton variante="secundario" onClick={() => {
+              const token = getAccessToken();
+              window.open(`${BASE}/reportes/proyecto/${id}/pdf?token=${token}`, '_blank');
+            }}>⬇ PDF</Boton>
+          </div>
         </div>
       </div>
 
