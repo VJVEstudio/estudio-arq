@@ -254,5 +254,149 @@ router.get('/general/csv', async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="reporte_general.csv"`);
   res.send('\uFEFF' + csv.join('\n'));
 });
+// GET /api/reportes/proyecto/:id/pdf
+router.get('/proyecto/:id/pdf', async (req, res) => {
+  const PDFDocument = require('pdfkit');
+  const { id } = req.params;
 
+  const { rows: [proyecto] } = await query(
+    `SELECT p.*, c.nombre_razon_social AS cliente_nombre
+     FROM proyectos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1`, [id]
+  );
+  if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado' });
+
+  const { rows: ingresos } = await query(
+    `SELECT i.fecha, i.monto, i.moneda, i.tipo, i.descripcion, i.comprobante,
+            i.cotizacion_dolar, s.nombre AS socio_nombre, i.es_del_estudio
+     FROM ingresos i LEFT JOIN socios s ON s.id = i.socio_id
+     WHERE i.proyecto_id = $1 ORDER BY i.fecha ASC`, [id]
+  );
+
+  const { rows: egresos } = await query(
+    `SELECT e.fecha, e.monto, e.moneda, e.categoria, e.descripcion, e.comprobante,
+            e.cotizacion_dolar, d.nombre AS destinatario_nombre
+     FROM egresos e JOIN destinatarios d ON d.id = e.destinatario_id
+     WHERE e.proyecto_id = $1 AND e.categoria != 'dibujantes' ORDER BY e.fecha ASC`, [id]
+  );
+
+  const { rows: horas } = await query(
+    `SELECT h.fecha, h.horas, h.descripcion_tarea, d.nombre AS dibujante_nombre,
+            d.tarifa_hora_base, (h.horas * d.tarifa_hora_base) AS costo_actual
+     FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id
+     WHERE h.proyecto_id = $1 ORDER BY h.fecha ASC`, [id]
+  );
+
+  const cotizacionActual = await obtenerCotizacionOficial();
+
+  const totalIngresosARS = ingresos.filter(i => i.moneda === 'ARS').reduce((s, i) => s + Number(i.monto), 0);
+  const totalEgresosARS = egresos.filter(e => e.moneda === 'ARS').reduce((s, e) => s + Number(e.monto), 0);
+  const costoHoras = horas.reduce((s, h) => s + Number(h.costo_actual), 0);
+  const resultadoARS = totalIngresosARS - totalEgresosARS - costoHoras;
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="reporte_${proyecto.nombre.replace(/\s+/g,'_')}.pdf"`);
+
+  const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  doc.pipe(res);
+
+  const fmtM = (n, moneda = 'ARS') => moneda === 'USD'
+    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtF = (f) => {
+    if (!f) return '—';
+    const d = new Date(String(f).slice(0, 10) + 'T00:00:00');
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-AR');
+  };
+
+  const margen = 40;
+  const ancho = doc.page.width - 80;
+
+  // Encabezado
+  doc.fontSize(16).font('Helvetica-Bold').fillColor('#1a2744')
+    .text(proyecto.nombre, margen, margen);
+  doc.fontSize(11).font('Helvetica').fillColor('#666')
+    .text(`${proyecto.cliente_nombre} · ${proyecto.estado}`, margen, margen + 22);
+  doc.fontSize(9).fillColor('#999')
+    .text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, margen, margen + 38);
+  doc.moveDown(3);
+
+  // Resumen financiero
+  const yRes = doc.y;
+  doc.rect(margen, yRes, ancho, 80).fillAndStroke('#f8f9fa', '#e0e0e0');
+  const colW = ancho / 3;
+  [
+    { label: 'Ingresos ARS', valor: fmtM(totalIngresosARS), color: '#1b5e20' },
+    { label: 'Egresos directos', valor: fmtM(totalEgresosARS), color: '#b71c1c' },
+    { label: 'Costo dibujantes', valor: fmtM(costoHoras), color: '#e65100' },
+  ].forEach((item, i) => {
+    const x = margen + i * colW + 16;
+    doc.fillColor('#999').fontSize(9).font('Helvetica').text(item.label.toUpperCase(), x, yRes + 12, { width: colW - 32 });
+    doc.fillColor(item.color).fontSize(13).font('Helvetica-Bold').text(item.valor, x, yRes + 26, { width: colW - 32 });
+  });
+  // Resultado neto
+  doc.fillColor(resultadoARS >= 0 ? '#1b5e20' : '#b71c1c').fontSize(11).font('Helvetica-Bold')
+    .text(`Resultado neto: ${resultadoARS >= 0 ? '+' : ''}${fmtM(resultadoARS)}`, margen + 16, yRes + 54, { width: ancho - 32 });
+  doc.y = yRes + 90;
+  doc.moveDown(0.5);
+
+  // Sección helper
+  const dibujarSeccion = (titulo, filas, columnas) => {
+    if (!filas.length) return;
+    if (doc.y > 680) doc.addPage();
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#1a2744').text(titulo, margen, doc.y);
+    doc.moveDown(0.4);
+    const y = doc.y;
+    const altoEnc = 16;
+    doc.rect(margen, y, ancho, altoEnc).fillAndStroke('#1a2744', '#1a2744');
+    let xCol = margen;
+    columnas.forEach(c => {
+      doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold')
+        .text(c.label, xCol + 4, y + 4, { width: c.w - 8, align: c.align || 'left' });
+      xCol += c.w;
+    });
+    let yFila = y + altoEnc;
+    filas.forEach((f, idx) => {
+      const altoFila = 16;
+      if (yFila + altoFila > 760) { doc.addPage(); yFila = 40; }
+      doc.rect(margen, yFila, ancho, altoFila).fillAndStroke(idx % 2 === 0 ? '#f8f9fa' : '#fff', '#e0e0e0');
+      xCol = margen;
+      columnas.forEach(c => {
+        const val = typeof c.valor === 'function' ? c.valor(f) : f[c.key] || '—';
+        doc.fillColor('#333').fontSize(8).font('Helvetica')
+          .text(String(val), xCol + 4, yFila + 4, { width: c.w - 8, align: c.align || 'left', ellipsis: true });
+        xCol += c.w;
+      });
+      yFila += altoFila;
+    });
+    doc.y = yFila + 12;
+  };
+
+  dibujarSeccion('Ingresos', ingresos, [
+    { label: 'Fecha', w: 70, valor: f => fmtF(f.fecha) },
+    { label: 'Origen', w: 100, valor: f => f.es_del_estudio ? 'Estudio' : (f.socio_nombre || '—') },
+    { label: 'Tipo', w: 80, key: 'tipo' },
+    { label: 'Comprobante', w: 90, key: 'comprobante' },
+    { label: 'Moneda', w: 45, key: 'moneda' },
+    { label: 'Monto', w: ancho - 385, align: 'right', valor: f => fmtM(f.monto, f.moneda) },
+  ]);
+
+  dibujarSeccion('Egresos directos', egresos, [
+    { label: 'Fecha', w: 70, valor: f => fmtF(f.fecha) },
+    { label: 'Destinatario', w: 120, key: 'destinatario_nombre' },
+    { label: 'Categoría', w: 80, key: 'categoria' },
+    { label: 'Comprobante', w: 90, key: 'comprobante' },
+    { label: 'Moneda', w: 45, key: 'moneda' },
+    { label: 'Monto', w: ancho - 405, align: 'right', valor: f => fmtM(f.monto, f.moneda) },
+  ]);
+
+  dibujarSeccion('Horas trabajadas', horas, [
+    { label: 'Fecha', w: 70, valor: f => fmtF(f.fecha) },
+    { label: 'Dibujante', w: 120, key: 'dibujante_nombre' },
+    { label: 'Horas', w: 50, align: 'right', valor: f => Number(f.horas).toFixed(1) },
+    { label: 'Tarifa', w: 100, align: 'right', valor: f => fmtM(f.tarifa_hora_base) },
+    { label: 'Costo', w: ancho - 340, align: 'right', valor: f => fmtM(f.costo_actual) },
+  ]);
+
+  doc.end();
+});
 module.exports = router;
