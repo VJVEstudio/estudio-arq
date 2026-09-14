@@ -178,7 +178,10 @@ router.get('/general', async (req, res) => {
   );
   const { rows: porDibujante } = await query(
     `SELECT d.nombre AS dibujante,
-            SUM(h.horas) AS horas_totales, SUM(h.costo_total) AS costo_total,
+            SUM(h.horas) AS horas_totales,
+            SUM(h.horas * d.tarifa_hora_base) AS costo_total,
+            SUM(CASE WHEN h.liquidada THEN h.horas * d.tarifa_hora_base ELSE 0 END) AS costo_liquidado,
+            SUM(CASE WHEN NOT h.liquidada THEN h.horas * d.tarifa_hora_base ELSE 0 END) AS costo_pendiente,
             COUNT(DISTINCT h.proyecto_id) AS proyectos
      FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id
      WHERE TRUE ${condH}
