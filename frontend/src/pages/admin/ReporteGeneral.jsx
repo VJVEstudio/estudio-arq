@@ -221,7 +221,7 @@ export default function ReporteGeneral() {
   };
 
   return (
-    <div style={{ padding: '32px', maxWidth: '1200px' }}>
+    <div style={{ padding: '32px', maxWidth: '1600px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 500 }}>Reporte general</h1>
