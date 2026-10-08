@@ -282,7 +282,6 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
 
     doc.y = y + 10;
   });
-  });
 
   doc.end();
 });
