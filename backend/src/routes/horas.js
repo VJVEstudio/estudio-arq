@@ -246,9 +246,6 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
     doc.text(g.nombre, 48, yInicio + 6, { width: 220, continued: false });
     doc.font('Helvetica').fontSize(9).fillColor('#666');
     doc.text(`Tarifa actual: ${moneyFmt(g.tarifa)}/h`, 270, yInicio + 8);
-    if (Number(g.monotributo) > 0) {
-      doc.text(`Monotributo: ${moneyFmt(g.monotributo)}/mes`, 400, yInicio + 8);
-    }
     doc.fontSize(10).fillColor('#1a1a1a');
     doc.text(`${g.horasTotal.toFixed(1)} h totales`, 420, yInicio + 7, { width: 90, align: 'right' });
     doc.fillColor('#b71c1c').font('Helvetica-Bold');
@@ -270,7 +267,21 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
       y += 16;
     });
 
+    // Fila de monotributo si aplica
+    if (Number(g.monotributo) > 0) {
+      if (y > 750) { doc.addPage(); y = 40; }
+      doc.rect(40, y, anchoPagina, 16).fill('#f0f4ff');
+      doc.fillColor('#0d47a1').fontSize(9).font('Helvetica-Oblique');
+      doc.text('Monotributo mensual', 48, y + 3, { width: 220 });
+      doc.text('', 270, y + 3, { width: 60 });
+      doc.text('', 340, y + 3, { width: 110 });
+      doc.font('Helvetica-Bold').fillColor('#0d47a1');
+      doc.text(moneyFmt(g.monotributo), 480, y + 3, { width: 95, align: 'right' });
+      y += 16;
+    }
+
     doc.y = y + 10;
+  });
   });
 
   doc.end();
