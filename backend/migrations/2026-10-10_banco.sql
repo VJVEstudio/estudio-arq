@@ -18,8 +18,15 @@ CREATE TABLE IF NOT EXISTS banco_movimientos (
   cuit TEXT, clase TEXT NOT NULL, categoria_sugerida TEXT, destinatario_sugerido TEXT, detalle TEXT,
   estado TEXT NOT NULL DEFAULT 'pendiente', -- pendiente | vinculado | creado | inversion | ignorado
   ingreso_id UUID REFERENCES ingresos(id) ON DELETE SET NULL,
-  egreso_id  UUID REFERENCES egresos(id)  ON DELETE SET NULL,
+  liquidacion_id UUID,                    -- liquidación de horas pagada con este débito (solo informativo)
   nota TEXT, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- Un débito puede cubrir varios egresos (una liquidación de horas genera un egreso por
+-- proyecto y se paga con una sola transferencia). Cada egreso, a un solo movimiento.
+CREATE TABLE IF NOT EXISTS banco_movimiento_egresos (
+  banco_movimiento_id UUID NOT NULL REFERENCES banco_movimientos(id) ON DELETE CASCADE,
+  egreso_id UUID NOT NULL UNIQUE REFERENCES egresos(id) ON DELETE CASCADE,
+  PRIMARY KEY (banco_movimiento_id, egreso_id)
 );
 CREATE INDEX IF NOT EXISTS banco_movimientos_fecha_idx ON banco_movimientos (fecha);
 CREATE INDEX IF NOT EXISTS banco_movimientos_estado_idx ON banco_movimientos (estado);

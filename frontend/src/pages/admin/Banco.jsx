@@ -23,6 +23,15 @@ const fmtF = (f) => {
 };
 const fmtCuit = (c) => (c && c.length === 11 ? `${c.slice(0, 2)}-${c.slice(2, 10)}-${c.slice(10)}` : c);
 
+// Texto de una coincidencia y datos para vincularla
+const diasTxt = (d) => (d ? ` (${d} día${d > 1 ? 's' : ''} de diferencia)` : ' (mismo día)');
+const textoCoincidencia = (x) => x.tipo === 'liquidacion'
+  ? `Liquidación de horas de ${x.nombre} — ${x.mes}/${x.anio} (${x.cantidad} egreso${x.cantidad > 1 ? 's' : ''} por proyecto${x.monotributo ? ' + monotributo' : ''})${diasTxt(x.dias)}`
+  : `${x.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} del ${fmtF(x.fecha)} · ${x.nombre}${x.proyecto ? ` · ${x.proyecto}` : ''}${diasTxt(x.dias)}`;
+const datosVinculo = (x) => x.tipo === 'ingreso' ? { ingreso_id: x.id }
+  : x.tipo === 'liquidacion' ? { egreso_ids: x.egreso_ids, liquidacion_id: x.liquidacion_id }
+  : { egreso_ids: [x.id] };
+
 const PESTANAS = [
   { id: 'pendiente', label: 'Por revisar', filtro: m => m.estado === 'pendiente' },
   { id: 'sistema',   label: 'Ya en el sistema', filtro: m => m.estado === 'vinculado' || m.estado === 'creado' },
@@ -140,8 +149,9 @@ function PanelArqueo({ arqueo }) {
 // ── Sugerencia y acciones de cada movimiento ─────────────────────────────────
 function Sugerencia({ m, eleccion, onElegir }) {
   if (m.estado !== 'pendiente') {
-    if (m.ingreso_id) return <span style={{ fontSize: '12px', color: '#555' }}>Ingreso del {fmtF(m.ingreso_fecha)} · {m.ingreso_cliente}</span>;
-    if (m.egreso_id) return <span style={{ fontSize: '12px', color: '#555' }}>Egreso del {fmtF(m.egreso_fecha)} · {m.egreso_destinatario}</span>;
+    if (m.ingreso_id) return <span style={{ fontSize: '12px', color: '#555' }}>Ingreso del {fmtF(m.ingreso_fecha)} · {m.ingreso_cliente}{m.ingreso_proyecto ? ` · ${m.ingreso_proyecto}` : ' · sin proyecto'}</span>;
+    if (m.liquidacion_mes) return <span style={{ fontSize: '12px', color: '#555' }}>Liquidación de horas de {m.egreso_destinatario} — {m.liquidacion_mes}/{m.liquidacion_anio} ({m.egresos_cantidad} egreso{m.egresos_cantidad > 1 ? 's' : ''}{m.egreso_proyectos ? `: ${m.egreso_proyectos}` : ''})</span>;
+    if (m.egresos_cantidad > 0) return <span style={{ fontSize: '12px', color: '#555' }}>Egreso del {fmtF(m.egreso_fecha)} · {m.egreso_destinatario}{m.egresos_cantidad > 1 ? ` y ${m.egresos_cantidad - 1} más` : ''}{m.egreso_proyectos ? ` · ${m.egreso_proyectos}` : ''}</span>;
     if (m.estado === 'inversion') return <span style={{ fontSize: '12px', color: '#555' }}>{m.detalle || 'Fondo de inversión'}</span>;
     return null;
   }
@@ -150,7 +160,7 @@ function Sugerencia({ m, eleccion, onElegir }) {
   }
   if (m.coincidencias?.length) {
     const c = m.coincidencias;
-    const texto = (x) => `${x.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'} del ${fmtF(x.fecha)} · ${x.nombre}${x.dias ? ` (${x.dias} día${x.dias > 1 ? 's' : ''} de diferencia)` : ' (mismo día)'}`;
+    const texto = textoCoincidencia;
     return (
       <div style={{ fontSize: '12px' }}>
         <span style={{ color: '#1b5e20', fontWeight: 500 }}>✓ Ya registrado{c.length > 1 ? ` (${c.length} posibles)` : ''}:</span>
@@ -165,10 +175,18 @@ function Sugerencia({ m, eleccion, onElegir }) {
     );
   }
   const quien = Number(m.importe) > 0 ? m.cliente_sugerido_nombre : m.destinatario_sugerido_nombre;
+  if (m.destinatario_es_dibujante) {
+    return (
+      <span style={{ fontSize: '12px', color: '#8a5a00' }}>
+        Pago a <strong>{quien}</strong> (dibujante) sin liquidación que coincida. Si es el pago de horas, liquidalas
+        primero en <strong>Horas</strong> y después vinculá este pago, así no se duplica.
+      </span>
+    );
+  }
   return (
     <span style={{ fontSize: '12px', color: '#666' }}>
       {quien
-        ? <>Nuevo {Number(m.importe) > 0 ? 'ingreso de' : 'egreso a'} <strong>{quien}</strong></>
+        ? <>Nuevo {Number(m.importe) > 0 ? 'ingreso de' : 'egreso a'} <strong>{quien}</strong>{m.proyecto_sugerido_nombre && <> · {m.proyecto_sugerido_nombre}</>}</>
         : m.cuit ? <>CUIT {fmtCuit(m.cuit)} sin cargar en la app</> : 'Sin coincidencias'}
     </span>
   );
@@ -237,8 +255,8 @@ export default function Banco() {
     finally { setOcupado(null); }
   };
   const vincular = (m) => {
-    const elegido = m.coincidencias.find(x => x.id === (elecciones[m.id] || m.coincidencias[0].id));
-    return accion(m.id, () => post(`/banco/movimientos/${m.id}/vincular`, elegido.tipo === 'ingreso' ? { ingreso_id: elegido.id } : { egreso_id: elegido.id }));
+    const elegido = m.coincidencias.find(x => String(x.id) === String(elecciones[m.id] || m.coincidencias[0].id));
+    return accion(m.id, () => post(`/banco/movimientos/${m.id}/vincular`, datosVinculo(elegido)));
   };
   const cambiarEstado = (m, estado) => accion(m.id, () => post(`/banco/movimientos/${m.id}/estado`, { estado }));
 
@@ -254,8 +272,7 @@ export default function Banco() {
         for (const m of inversionesPend) await post(`/banco/movimientos/${m.id}/estado`, { estado: 'inversion' });
       } else {
         for (const m of coincidenciasUnicas) {
-          const c = m.coincidencias[0];
-          await post(`/banco/movimientos/${m.id}/vincular`, c.tipo === 'ingreso' ? { ingreso_id: c.id } : { egreso_id: c.id });
+          await post(`/banco/movimientos/${m.id}/vincular`, datosVinculo(m.coincidencias[0]));
         }
       }
       setModal(null);
@@ -274,7 +291,7 @@ export default function Banco() {
         await post(`/banco/movimientos/${m.id}/vincular`, { ingreso_id: nuevo.id, creado: true });
       } else {
         const nuevo = await post('/egresos', datos);
-        await post(`/banco/movimientos/${m.id}/vincular`, { egreso_id: nuevo.id, creado: true });
+        await post(`/banco/movimientos/${m.id}/vincular`, { egreso_ids: [nuevo.id], creado: true });
       }
       setModal(null);
       await cargar();
@@ -417,7 +434,8 @@ export default function Banco() {
           <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#666' }}>Banco: {fmtF(modal.mov.fecha)} · {modal.mov.descripcion}</p>
           <FormIngreso
             inicial={{
-              cliente_id: modal.mov.cliente_sugerido_id || '', monto: String(Math.abs(Number(modal.mov.importe))),
+              cliente_id: modal.mov.cliente_sugerido_id || '', proyecto_id: modal.mov.proyecto_sugerido_id || '',
+              monto: String(Math.abs(Number(modal.mov.importe))),
               moneda: 'ARS', fecha: iso(modal.mov.fecha), es_del_estudio: true, descripcion: `Banco: ${modal.mov.descripcion}`,
             }}
             clientes={clientes} proyectos={proyectos} socios={socios}
@@ -427,9 +445,17 @@ export default function Banco() {
       {modal?.tipo === 'crear-egreso' && (
         <Modal titulo={`Nuevo egreso desde el banco — ${fmt(modal.mov.importe)}`} onCerrar={() => setModal(null)} ancho={680}>
           <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#666' }}>Banco: {fmtF(modal.mov.fecha)} · {modal.mov.descripcion}</p>
+          {modal.mov.destinatario_es_dibujante && (
+            <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px', color: '#7a4b00' }}>
+              ⚠ Es un pago a un dibujante. Si corresponde a horas trabajadas, cancelá y liquidalas en <strong>Horas</strong>:
+              la liquidación crea los egresos por proyecto y después solo tenés que vincular este pago. Cargarlo acá
+              y además liquidar las horas duplicaría el gasto.
+            </div>
+          )}
           <FormEgreso
             inicial={{
-              destinatario_id: modal.mov.destinatario_sugerido_id || '', categoria: modal.mov.categoria_sugerida || 'generales',
+              destinatario_id: modal.mov.destinatario_sugerido_id || '', proyecto_id: modal.mov.proyecto_sugerido_id || '',
+              categoria: modal.mov.destinatario_es_dibujante ? 'dibujantes' : (modal.mov.categoria_sugerida || 'generales'),
               monto: String(Math.abs(Number(modal.mov.importe))), moneda: 'ARS', fecha: iso(modal.mov.fecha),
               pagado_por_estudio: true, descripcion: `Banco: ${modal.mov.descripcion}`,
             }}
@@ -443,7 +469,7 @@ export default function Banco() {
           <AlertaError mensaje={errorModal} onCerrar={() => setErrorModal('')} />
           <p style={{ fontSize: '14px', margin: '0 0 10px' }}>
             {modal.tipo === 'bloque-vincular'
-              ? 'Estos movimientos del banco coinciden con un único ingreso o egreso ya cargado (mismo importe, fecha cercana). Se van a vincular, sin crear registros nuevos:'
+              ? 'Estos movimientos del banco coinciden con un único registro ya cargado (mismo importe, fecha cercana): un ingreso, un egreso o una liquidación de horas completa. Se van a vincular, sin crear registros nuevos:'
               : 'Estos movimientos son suscripciones, rescates de fondos o intereses. Se van a marcar como fondos: no se cargan como ingresos ni egresos.'}
           </p>
           <div style={{ maxHeight: '320px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px', marginBottom: '16px' }}>
@@ -452,7 +478,7 @@ export default function Banco() {
                 <span style={{ width: '72px', color: '#666' }}>{fmtF(m.fecha)}</span>
                 <span style={{ flex: 1 }}>
                   {m.descripcion}
-                  {modal.tipo === 'bloque-vincular' && <span style={{ color: '#1b5e20' }}> → {m.coincidencias[0].tipo} {m.coincidencias[0].nombre} ({fmtF(m.coincidencias[0].fecha)})</span>}
+                  {modal.tipo === 'bloque-vincular' && <span style={{ color: '#1b5e20' }}> → {textoCoincidencia(m.coincidencias[0])}</span>}
                 </span>
                 <span style={{ fontWeight: 600, color: Number(m.importe) > 0 ? '#1b5e20' : '#b71c1c' }}>{fmt(m.importe)}</span>
               </div>
