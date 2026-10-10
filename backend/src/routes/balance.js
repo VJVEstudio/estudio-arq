@@ -52,7 +52,7 @@ router.get('/', async (req, res) => {
     const { rows: egresosSocio } = await query(
       `SELECT id, monto, moneda, socio_id
        FROM egresos
-       WHERE pagado_por_estudio = FALSE`
+       WHERE pagado_por_estudio = FALSE AND categoria <> 'extraccion_socio'`
     );
 
     for (const egreso of egresosSocio) {
@@ -100,6 +100,22 @@ router.get('/', async (req, res) => {
         if (saldos[d.socio_id]) {
           saldos[d.socio_id][ingreso.moneda] += Number(d.monto_asignado);
         }
+      });
+    }
+
+    // ===== EXTRACCIONES DE SOCIOS =====
+    // Un socio retira plata de la cuenta del estudio: esa plata era de todos, así que
+    // el que retira queda debiendo el total y cada socio (él incluido) recibe su parte
+    // según su porcentaje. Si todos retiran lo mismo, el saldo vuelve a cero.
+    const { rows: extracciones } = await query(
+      `SELECT monto, moneda, socio_id FROM egresos WHERE categoria = 'extraccion_socio' AND socio_id IS NOT NULL`
+    );
+    const totalPorcentaje = socios.reduce((a, s) => a + Number(s.porcentaje_participacion || 0), 0);
+    for (const ex of extracciones) {
+      if (!saldos[ex.socio_id] || !totalPorcentaje) continue;
+      saldos[ex.socio_id][ex.moneda] -= Number(ex.monto);
+      socios.forEach(s => {
+        saldos[s.id][ex.moneda] += Number(ex.monto) * Number(s.porcentaje_participacion || 0) / totalPorcentaje;
       });
     }
 

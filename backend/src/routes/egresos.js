@@ -7,6 +7,47 @@ const { rutaOcr } = require('../utils/ocrUpload');
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
 
+// Categoría para retiros de un socio desde la cuenta del estudio: no es un gasto,
+// es plata que se lleva ese socio (el balance lo trata como tal).
+const EXTRACCION = 'extraccion_socio';
+
+// Si la base limita las categorías (tipo enum o restricción CHECK), suma la nueva.
+// Se hace una sola vez; si falla, se registra y la app sigue funcionando.
+let categoriasListas = null;
+function asegurarCategorias() {
+  if (!categoriasListas) {
+    categoriasListas = (async () => {
+      const { rows: [col] } = await query(
+        `SELECT data_type, udt_name FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'egresos' AND column_name = 'categoria'`);
+      if (col?.data_type === 'USER-DEFINED') {
+        await query(`ALTER TYPE "${col.udt_name}" ADD VALUE IF NOT EXISTS '${EXTRACCION}'`);
+      }
+      const { rows: checks } = await query(
+        `SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+         WHERE conrelid = 'public.egresos'::regclass AND contype = 'c'`);
+      for (const c of checks) {
+        const soloLista = /categoria/.test(c.def) && /= ANY|IN \(/i.test(c.def) && !/ AND | OR /i.test(c.def);
+        if (soloLista && !c.def.includes(EXTRACCION)) {
+          const valores = [...new Set([...(c.def.match(/'([^']+)'/g) || []).map(v => v.slice(1, -1)), EXTRACCION])];
+          await query(
+            `ALTER TABLE egresos DROP CONSTRAINT "${c.conname}",
+               ADD CONSTRAINT "${c.conname}" CHECK (categoria IN (${valores.map(v => `'${v.replace(/'/g, "''")}'`).join(', ')}))`);
+          console.log(`Categoría ${EXTRACCION} agregada a la restricción ${c.conname}`);
+        }
+      }
+    })().catch(err => { console.error('No se pudo agregar la categoría de extracción:', err.message); });
+  }
+  return categoriasListas;
+}
+router.use(async (req, res, next) => { await asegurarCategorias(); next(); });
+
+// Quién figura como socio del egreso: el que pagó de su bolsillo, o el que retira
+function datosSocio({ categoria, pagado_por_estudio, socio_id }) {
+  if (categoria === EXTRACCION) return { pagado: true, socio: socio_id || null };
+  return { pagado: pagado_por_estudio ?? true, socio: pagado_por_estudio ? null : socio_id };
+}
+
 router.get('/', async (req, res) => {
   const { proyecto_id, categoria, moneda, socio_id, desde, hasta } = req.query;
   const condiciones = ['TRUE'];
@@ -87,7 +128,10 @@ router.post('/', async (req, res) => {
   if (!categoria)               return res.status(400).json({ error: 'La categoría es obligatoria' });
   if (!monto || monto <= 0)     return res.status(400).json({ error: 'El monto debe ser mayor a 0' });
   if (!moneda)                  return res.status(400).json({ error: 'La moneda es obligatoria' });
-  if (!pagado_por_estudio && !socio_id) {
+  if (categoria === EXTRACCION && !socio_id) {
+    return res.status(400).json({ error: 'Indicá qué socio hizo la extracción' });
+  }
+  if (categoria !== EXTRACCION && !pagado_por_estudio && !socio_id) {
     return res.status(400).json({ error: 'Si no pagó el estudio, se debe indicar el socio_id' });
   }
 
@@ -109,8 +153,8 @@ const fechaEgreso = fecha || new Date().toISOString().split('T')[0];
         categoria,
         monto,
         moneda,
-        pagado_por_estudio ?? true,
-        pagado_por_estudio ? null : socio_id,
+        datosSocio(req.body).pagado,
+        datosSocio(req.body).socio,
         fecha || new Date().toISOString().split('T')[0],
         comprobante || null,
         descripcion || null,
@@ -161,7 +205,10 @@ router.put('/:id', async (req, res) => {
   } = req.body;
 
   if (!monto || monto <= 0) return res.status(400).json({ error: 'El monto debe ser mayor a 0' });
-  if (!pagado_por_estudio && !socio_id) {
+  if (categoria === EXTRACCION && !socio_id) {
+    return res.status(400).json({ error: 'Indicá qué socio hizo la extracción' });
+  }
+  if (categoria !== EXTRACCION && !pagado_por_estudio && !socio_id) {
     return res.status(400).json({ error: 'Si no pagó el estudio, se debe indicar el socio_id' });
   }
 
@@ -175,8 +222,8 @@ router.put('/:id', async (req, res) => {
        WHERE id=$12 RETURNING *`,
       [
         destinatario_id, proyecto_id || null, categoria, monto, moneda,
-        pagado_por_estudio ?? true,
-        pagado_por_estudio ? null : socio_id,
+        datosSocio(req.body).pagado,
+        datosSocio(req.body).socio,
         fecha, comprobante || null, descripcion || null,
         archivo_url || null,
         req.params.id,
