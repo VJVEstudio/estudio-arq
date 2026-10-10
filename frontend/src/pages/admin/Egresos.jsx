@@ -96,7 +96,7 @@ function NuevoDestinatario({ inicial = {}, onCrear, onCancelar }) {
   );
 }
 
-export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onNuevoDestinatario, onGuardar, onCancelar, guardando, errorServidor }) {  const [form, setForm] = useState({
+export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onNuevoDestinatario, onGuardar, onCancelar, guardando, errorServidor, destinatarioSugerido = null }) {  const [form, setForm] = useState({
     destinatario_id:    inicial.destinatario_id    || '',
     proyecto_id:        inicial.proyecto_id        || '',
     categoria:          inicial.categoria          || 'generales',
@@ -110,7 +110,8 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
     archivo_url:        inicial.archivo_url        || '',
   });
   const [mostrarNuevoDest, setMostrarNuevoDest] = useState(false);
-  const [proveedorDetectado, setProveedorDetectado] = useState(null);
+  // Proveedor leído de una factura (OCR) o del resumen del banco que no está cargado como destinatario
+  const [proveedorDetectado, setProveedorDetectado] = useState(destinatarioSugerido);
   const [errores, setErrores] = useState({});
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
 
@@ -174,7 +175,9 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
       </Campo>
       {proveedorDetectado && !mostrarNuevoDest && !form.destinatario_id && (
         <p style={{ margin: '-8px 0 12px', fontSize: '12px', color: '#8a5a00' }}>
-          La factura es de <strong>{proveedorDetectado.nombre}</strong>{proveedorDetectado.cuit ? ` (CUIT ${proveedorDetectado.cuit})` : ''}, que no está cargado como destinatario.{' '}
+          {proveedorDetectado.nombre
+            ? <>La factura es de <strong>{proveedorDetectado.nombre}</strong>{proveedorDetectado.cuit ? ` (CUIT ${proveedorDetectado.cuit})` : ''}, que no está cargado como destinatario.{' '}</>
+            : <>El CUIT <strong>{proveedorDetectado.cuit}</strong> no está cargado como destinatario.{' '}</>}
           <Boton type="button" variante="texto" style={{ fontSize: '12px', padding: 0 }} onClick={() => setMostrarNuevoDest(true)}>Crearlo</Boton>
         </p>
       )}
