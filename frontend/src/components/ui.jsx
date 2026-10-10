@@ -140,19 +140,35 @@ export function Buscador({ value, onChange, placeholder = 'Buscar…' }) {
   );
 }
 
-export function Tabla({ columnas, datos, renderFila, vacio = 'Sin resultados' }) {
+// `ordenable` (opcional): un campo por columna (null = no ordenable).
+// `orden` = { campo, dir: 'asc' | 'desc' } y `onOrdenar(campo)` al hacer clic en un título.
+export function Tabla({ columnas, datos, renderFila, vacio = 'Sin resultados', ordenable, orden, onOrdenar }) {
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
         <thead>
           <tr>
-            {columnas.map((col, i) => (
-              <th key={i} style={{
-                padding: '10px 14px', textAlign: 'left', fontWeight: 500,
-                fontSize: '12px', color: '#666', borderBottom: '1px solid #e0e0e0',
-                whiteSpace: 'nowrap',
-              }}>{col}</th>
-            ))}
+            {columnas.map((col, i) => {
+              const campo = ordenable?.[i];
+              const activo = campo && orden?.campo === campo;
+              return (
+                <th key={i}
+                  onClick={campo && onOrdenar ? () => onOrdenar(campo) : undefined}
+                  title={campo ? 'Ordenar por esta columna' : undefined}
+                  style={{
+                    padding: '10px 14px', textAlign: 'left', fontWeight: activo ? 600 : 500,
+                    fontSize: '12px', color: activo ? '#1a1a1a' : '#666', borderBottom: '1px solid #e0e0e0',
+                    whiteSpace: 'nowrap', cursor: campo ? 'pointer' : 'default', userSelect: 'none',
+                  }}>
+                  {col}
+                  {campo && (
+                    <span style={{ marginLeft: '4px', fontSize: '10px', color: activo ? '#1a1a1a' : '#bbb' }}>
+                      {activo ? (orden.dir === 'asc' ? '▲' : '▼') : '⇅'}
+                    </span>
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>

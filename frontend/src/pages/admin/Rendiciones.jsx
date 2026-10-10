@@ -137,7 +137,7 @@ export default function Rendiciones() {
   const [buscar, setBuscar] = useState('');
   const [filtroPrefijo, setFiltroPrefijo] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('');
-  const [orden, setOrden] = useState('fecha_desc');
+  const [orden, setOrden] = useState({ campo: 'fecha', dir: 'desc' });
   const [totales, setTotales] = useState([]);
   const [proyectos, setProyectos] = useState([]);
   const [modal, setModal] = useState(null);
@@ -169,11 +169,33 @@ export default function Rendiciones() {
       return true;
     })
     .sort((a, b) => {
-      if (orden === 'fecha_desc') return new Date(b.fecha) - new Date(a.fecha);
-      if (orden === 'fecha_asc')  return new Date(a.fecha) - new Date(b.fecha);
-      if (orden === 'tipo_asc')   return a.tipo.localeCompare(b.tipo);
-      return 0;
+      const signo = orden.dir === 'asc' ? 1 : -1;
+      const texto = (x, y) => String(x || '').localeCompare(String(y || ''), 'es', { numeric: true, sensitivity: 'base' });
+      const numero = (x, y) => Number(x || 0) - Number(y || 0);
+      let r = 0;
+      switch (orden.campo) {
+        case 'rendicion':     r = texto(`${a.tipo}${a.numero}`, `${b.tipo}${b.numero}`); break;
+        case 'cliente':       r = texto(a.cliente_nombre, b.cliente_nombre); break;
+        case 'proyecto':      r = texto(a.proyecto_nombre, b.proyecto_nombre); break;
+        case 'fecha':         r = new Date(a.fecha) - new Date(b.fecha); break;
+        case 'comprobantes':  r = numero(a.cantidad_comprobantes, b.cantidad_comprobantes); break;
+        case 'total_ars':     r = numero(a.total_ars, b.total_ars); break;
+        case 'total_usd':     r = numero(a.total_usd, b.total_usd); break;
+        case 'estado':        r = texto(a.estado, b.estado); break;
+        default:              r = 0;
+      }
+      // Desempate: más reciente primero
+      return r * signo || new Date(b.fecha) - new Date(a.fecha);
     }), [rendiciones, buscar, filtroPrefijo, filtroTipo, orden]);
+
+  // Clic en un título: si ya ordena por esa columna invierte el sentido; si no,
+  // texto arranca A→Z y fechas/montos arrancan del más reciente/mayor.
+  const CAMPOS_TEXTO = ['rendicion', 'cliente', 'proyecto', 'estado'];
+  const ordenarPor = (campo) => setOrden(o => o.campo === campo
+    ? { campo, dir: o.dir === 'asc' ? 'desc' : 'asc' }
+    : { campo, dir: CAMPOS_TEXTO.includes(campo) ? 'asc' : 'desc' });
+  const valorOrdenSelect = `${orden.campo}_${orden.dir}`;
+  const OPCIONES_ORDEN = { fecha_desc: { campo: 'fecha', dir: 'desc' }, fecha_asc: { campo: 'fecha', dir: 'asc' }, rendicion_asc: { campo: 'rendicion', dir: 'asc' } };
 
   const idsKey = rendicionesFiltradas.map(r => r.id).join(',');
 
@@ -247,10 +269,12 @@ export default function Rendiciones() {
             {prefijosDisponibles.map(p => <option key={p} value={p}>{p}</option>)}
           </Select>
         )}
-        <Select value={orden} onChange={e => setOrden(e.target.value)} style={{ width: 'auto' }}>
+        <Select value={OPCIONES_ORDEN[valorOrdenSelect] ? valorOrdenSelect : 'columna'}
+          onChange={e => OPCIONES_ORDEN[e.target.value] && setOrden(OPCIONES_ORDEN[e.target.value])} style={{ width: 'auto' }}>
           <option value="fecha_desc">Más recientes primero</option>
           <option value="fecha_asc">Más antiguas primero</option>
-          <option value="tipo_asc">Por tipo A→Z</option>
+          <option value="rendicion_asc">Por rendición A→Z</option>
+          {!OPCIONES_ORDEN[valorOrdenSelect] && <option value="columna" disabled>Ordenado por columna</option>}
         </Select>
       </div>
 
@@ -292,6 +316,9 @@ export default function Rendiciones() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
             columnas={['Rendición', 'Cliente', 'Proyecto', 'Fecha', 'Comprobantes', 'Total ARS', 'Total USD', 'Estado', '']}
+            ordenable={['rendicion', 'cliente', 'proyecto', 'fecha', 'comprobantes', 'total_ars', 'total_usd', 'estado', null]}
+            orden={orden}
+            onOrdenar={ordenarPor}
             datos={rendicionesFiltradas}
             vacio="No hay rendiciones. Creá la primera."
             renderFila={(r) => (
