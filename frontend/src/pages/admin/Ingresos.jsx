@@ -271,6 +271,16 @@ export default function Ingresos() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
             columnas={['Fecha', 'Cliente', 'Proyecto', 'Monto', 'Tipo', 'Acreditado a', 'Comprobante', '']}
+            ordenable={[
+              { campo: 'fecha', tipo: 'fecha' },
+              { campo: 'cliente_nombre', tipo: 'texto' },
+              { campo: 'proyecto_nombre', tipo: 'texto' },
+              { campo: 'monto', tipo: 'monto', valor: (f) => [f.moneda, f.monto] },
+              { campo: 'tipo', tipo: 'texto' },
+              { campo: 'socio_nombre', tipo: 'texto', valor: (f) => f.es_del_estudio ? 'Estudio' : f.socio_nombre },
+              { campo: 'comprobante', tipo: 'texto' },
+              null,
+            ]}
             datos={ingresosFiltrados}
             vacio="No hay ingresos registrados."
             renderFila={(i) => (

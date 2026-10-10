@@ -399,6 +399,16 @@ export default function Horas() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
             columnas={['Fecha', 'Dibujante', 'Proyecto', 'Horas', 'Tarifa aplicada', 'Costo', 'Estado', 'Descripción']}
+            ordenable={[
+              { campo: 'fecha', tipo: 'fecha' },
+              { campo: 'dibujante_nombre', tipo: 'texto' },
+              { campo: 'proyecto_nombre', tipo: 'texto' },
+              { campo: 'horas', tipo: 'numero' },
+              { campo: 'tarifa_aplicada', tipo: 'numero' },
+              { campo: 'costo_total', tipo: 'numero' },
+              { campo: 'liquidada', tipo: 'texto', valor: (f) => f.liquidada ? 'Liquidada' : 'Pendiente' },
+              { campo: 'descripcion', tipo: 'texto' },
+            ]}
             datos={horas}
             vacio="No hay registros de horas para los filtros seleccionados."
             renderFila={(h) => (

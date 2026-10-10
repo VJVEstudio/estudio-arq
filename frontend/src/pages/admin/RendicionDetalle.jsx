@@ -490,6 +490,15 @@ export default function RendicionDetalle() {
             <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px' }}>
               <Tabla
                 columnas={['Descripción', 'Comprobante', 'Neto', 'IVA', 'IIBB', 'Total', '']}
+                ordenable={[
+                  { campo: 'descripcion', tipo: 'texto' },
+                  { campo: 'numero_comprobante', tipo: 'texto' },
+                  { campo: 'monto_neto', tipo: 'numero' },
+                  { campo: 'iva', tipo: 'numero' },
+                  { campo: 'iibb', tipo: 'numero' },
+                  { campo: 'monto_total', tipo: 'numero' },
+                  null,
+                ]}
                 datos={lista}
                 renderFila={(c) => (
                   <Fila key={c.id}>

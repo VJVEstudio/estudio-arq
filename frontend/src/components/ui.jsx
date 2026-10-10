@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const AZUL  = '#1a2744';
 export const AZUL2 = '#243460';
@@ -140,19 +140,79 @@ export function Buscador({ value, onChange, placeholder = 'Buscar…' }) {
   );
 }
 
-export function Tabla({ columnas, datos, renderFila, vacio = 'Sin resultados' }) {
+// ── Ordenamiento de tablas ───────────────────────────────────────────────────
+// Compara dos valores según su tipo: 'texto' (A→Z, con números en orden natural:
+// RV9 antes que RV10), 'fecha', 'numero', o 'monto' (valor = [moneda, monto]:
+// agrupa por moneda y dentro de cada una ordena por importe). Vacíos siempre al final.
+export function compararValores(a, b, tipo = 'texto', dir = 'asc') {
+  const vacio = (v) => v === null || v === undefined || v === '';
+  if (tipo === 'monto') {
+    const [ma, va] = a || [], [mb, vb] = b || [];
+    if ((ma || '') !== (mb || '')) return String(ma || '').localeCompare(String(mb || ''));
+    return compararValores(va, vb, 'numero', dir);
+  }
+  if (vacio(a) && vacio(b)) return 0;
+  if (vacio(a)) return 1;
+  if (vacio(b)) return -1;
+  const signo = dir === 'asc' ? 1 : -1;
+  if (tipo === 'numero') return (Number(a) - Number(b)) * signo;
+  if (tipo === 'fecha') return (new Date(a) - new Date(b)) * signo;
+  return String(a).localeCompare(String(b), 'es', { numeric: true, sensitivity: 'base' }) * signo;
+}
+
+// Columnas ordenables: `ordenable` lleva un elemento por columna (null = no ordenable):
+//   { campo, tipo, valor }  → la tabla ordena sola (`valor(fila)` opcional; si no, usa fila[campo]).
+//   'campo' (texto)         → modo controlado: el padre ordena con `orden` + `onOrdenar(campo)`.
+// Primer clic: texto A→Z, fechas y números del más reciente/mayor. Segundo clic: invierte.
+export function Tabla({ columnas, datos, renderFila, vacio = 'Sin resultados', ordenable, orden, onOrdenar }) {
+  const controlado = Boolean(onOrdenar);
+  const [ordenInterno, setOrdenInterno] = useState(null);
+  const defs = (ordenable || []).map(o => (o && typeof o === 'object') ? o : (o ? { campo: o } : null));
+  const ordenActual = controlado ? orden : ordenInterno;
+
+  const alHacerClic = (def) => {
+    if (controlado) return onOrdenar(def.campo);
+    setOrdenInterno(o => o?.campo === def.campo
+      ? { campo: def.campo, dir: o.dir === 'asc' ? 'desc' : 'asc' }
+      : { campo: def.campo, dir: (def.tipo || 'texto') === 'texto' ? 'asc' : 'desc' });
+  };
+
+  let filas = datos;
+  if (!controlado && ordenActual) {
+    const def = defs.find(d => d?.campo === ordenActual.campo);
+    if (def) {
+      const valor = def.valor || ((f) => f[def.campo]);
+      filas = [...datos].sort((a, b) => compararValores(valor(a), valor(b), def.tipo, ordenActual.dir));
+    }
+  }
+
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
         <thead>
           <tr>
-            {columnas.map((col, i) => (
-              <th key={i} style={{
-                padding: '10px 14px', textAlign: 'left', fontWeight: 500,
-                fontSize: '12px', color: '#666', borderBottom: '1px solid #e0e0e0',
-                whiteSpace: 'nowrap',
-              }}>{col}</th>
-            ))}
+            {columnas.map((col, i) => {
+              const def = defs[i];
+              const campo = def?.campo;
+              const activo = campo && ordenActual?.campo === campo;
+              return (
+                <th key={i}
+                  onClick={campo ? () => alHacerClic(def) : undefined}
+                  title={campo ? 'Ordenar por esta columna' : undefined}
+                  style={{
+                    padding: '10px 14px', textAlign: 'left', fontWeight: activo ? 600 : 500,
+                    fontSize: '12px', color: activo ? '#1a1a1a' : '#666', borderBottom: '1px solid #e0e0e0',
+                    whiteSpace: 'nowrap', cursor: campo ? 'pointer' : 'default', userSelect: 'none',
+                  }}>
+                  {col}
+                  {campo && (
+                    <span style={{ marginLeft: '4px', fontSize: '10px', color: activo ? '#1a1a1a' : '#bbb' }}>
+                      {activo ? (ordenActual.dir === 'asc' ? '▲' : '▼') : '⇅'}
+                    </span>
+                  )}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -160,7 +220,7 @@ export function Tabla({ columnas, datos, renderFila, vacio = 'Sin resultados' })
             <tr><td colSpan={columnas.length} style={{
               padding: '32px', textAlign: 'center', color: '#999', fontSize: '14px',
             }}>{vacio}</td></tr>
-          ) : datos.map((fila, i) => renderFila(fila, i))}
+          ) : filas.map((fila, i) => renderFila(fila, i))}
         </tbody>
       </table>
     </div>

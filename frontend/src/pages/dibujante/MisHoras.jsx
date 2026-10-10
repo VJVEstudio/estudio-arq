@@ -255,6 +255,13 @@ export default function MisHoras() {
           <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
             <Tabla
               columnas={['Fecha', 'Proyecto', 'Horas', 'Descripción', '']}
+              ordenable={[
+                { campo: 'fecha', tipo: 'fecha' },
+                { campo: 'proyecto_nombre', tipo: 'texto' },
+                { campo: 'horas', tipo: 'numero' },
+                { campo: 'descripcion', tipo: 'texto' },
+                null,
+              ]}
               datos={horasFiltradas}
               vacio="No hay registros para el período seleccionado."
               renderFila={(h) => (

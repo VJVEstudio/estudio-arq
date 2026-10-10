@@ -195,6 +195,16 @@ export default function Proyectos() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
             columnas={['Proyecto', 'Cliente', 'Estado', 'Inicio', 'Cierre est.', 'Dibujantes', 'Horas', '']}
+            ordenable={[
+              { campo: 'nombre', tipo: 'texto' },
+              { campo: 'cliente_nombre', tipo: 'texto' },
+              { campo: 'estado', tipo: 'texto' },
+              { campo: 'fecha_inicio', tipo: 'fecha' },
+              { campo: 'fecha_cierre_estimada', tipo: 'fecha' },
+              { campo: 'dibujantes_asignados', tipo: 'numero' },
+              { campo: 'horas_totales', tipo: 'numero' },
+              null,
+            ]}
             datos={proyectosFiltrados}
             vacio="No hay proyectos. Creá el primero."
             renderFila={(p) => (
