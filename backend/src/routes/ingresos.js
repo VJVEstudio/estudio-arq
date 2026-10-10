@@ -2,6 +2,7 @@ const express = require('express');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 const { obtenerCotizacionOficial } = require('../utils/cotizacion');
+const { rutaOcr } = require('../utils/ocrUpload');
 
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
@@ -37,6 +38,9 @@ router.get('/', async (req, res) => {
   );
   res.json(rows);
 });
+
+// Lee una factura con OCR y la sube a Storage (no crea el ingreso)
+router.post('/ocr', ...rutaOcr('ingresos'));
 
 router.get('/resumen', async (req, res) => {
   const { desde, hasta } = req.query;
@@ -79,7 +83,7 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   const { cliente_id, proyecto_id, monto, moneda, tipo,
-          es_del_estudio, socio_id, fecha, comprobante, descripcion } = req.body;
+          es_del_estudio, socio_id, fecha, comprobante, descripcion, archivo_url } = req.body;
   if (!cliente_id)          return res.status(400).json({ error: 'cliente_id es obligatorio' });
   if (!monto || monto <= 0) return res.status(400).json({ error: 'El monto debe ser mayor a 0' });
   if (!moneda)              return res.status(400).json({ error: 'La moneda es obligatoria' });
@@ -93,12 +97,12 @@ router.post('/', async (req, res) => {
 const fechaIngreso = fecha || new Date().toISOString().split('T')[0];
     const cotizacion_dolar = moneda === 'USD' ? await obtenerCotizacionOficial(fechaIngreso) : null;    const { rows } = await client.query(
       `INSERT INTO ingresos
-         (cliente_id, proyecto_id, monto, moneda, tipo, es_del_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+         (cliente_id, proyecto_id, monto, moneda, tipo, es_del_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar, archivo_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [cliente_id, proyecto_id || null, monto, moneda, tipo,
        es_del_estudio ?? true, es_del_estudio ? null : socio_id,
        fecha || new Date().toISOString().split('T')[0],
-       comprobante || null, descripcion || null, cotizacion_dolar]
+       comprobante || null, descripcion || null, cotizacion_dolar, archivo_url || null]
     );
     await client.query(`SELECT distribuir_ingreso($1)`, [rows[0].id]);
     await client.query('COMMIT');
@@ -114,7 +118,7 @@ const fechaIngreso = fecha || new Date().toISOString().split('T')[0];
 
 router.put('/:id', async (req, res) => {
   const { cliente_id, proyecto_id, monto, moneda, tipo,
-          es_del_estudio, socio_id, fecha, comprobante, descripcion } = req.body;
+          es_del_estudio, socio_id, fecha, comprobante, descripcion, archivo_url } = req.body;
   if (!monto || monto <= 0) return res.status(400).json({ error: 'El monto debe ser mayor a 0' });
   if (!es_del_estudio && !socio_id) {
     return res.status(400).json({ error: 'Si no es del estudio, se debe indicar el socio_id' });
@@ -124,11 +128,11 @@ router.put('/:id', async (req, res) => {
     await client.query('BEGIN');
     const { rows } = await client.query(
       `UPDATE ingresos SET cliente_id=$1, proyecto_id=$2, monto=$3, moneda=$4, tipo=$5,
-         es_del_estudio=$6, socio_id=$7, fecha=$8, comprobante=$9, descripcion=$10
-       WHERE id=$11 RETURNING *`,
+         es_del_estudio=$6, socio_id=$7, fecha=$8, comprobante=$9, descripcion=$10, archivo_url=$11
+       WHERE id=$12 RETURNING *`,
       [cliente_id, proyecto_id || null, monto, moneda, tipo,
        es_del_estudio ?? true, es_del_estudio ? null : socio_id,
-       fecha, comprobante || null, descripcion || null, req.params.id]
+       fecha, comprobante || null, descripcion || null, archivo_url || null, req.params.id]
     );
     if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Ingreso no encontrado' }); }
     await client.query(`DELETE FROM ingreso_socios WHERE ingreso_id = $1`, [req.params.id]);

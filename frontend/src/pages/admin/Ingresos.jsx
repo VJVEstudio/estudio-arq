@@ -5,6 +5,7 @@ import {
   EncabezadoSeccion, Boton, Tabla, Fila, Celda, Badge,
   Modal, Campo, Input, Select, Textarea, AlertaError, Buscador,
 } from '../../components/ui';
+import LectorComprobante, { buscarCoincidencia } from '../../components/LectorComprobante';
 
 const fmt = (monto, moneda) =>
   moneda === 'USD'
@@ -49,8 +50,10 @@ export function FormIngreso({ inicial = {}, clientes, proyectos, socios, onGuard
     fecha:         inicial.fecha         || new Date().toISOString().split('T')[0],
     comprobante:   inicial.comprobante   || '',
     descripcion:   inicial.descripcion   || '',
+    archivo_url:   inicial.archivo_url   || '',
   });
   const [errores, setErrores] = useState({});
+  const [clienteDetectado, setClienteDetectado] = useState(null);
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
 
   const proyectosFiltrados = form.cliente_id
@@ -73,8 +76,34 @@ export function FormIngreso({ inicial = {}, clientes, proyectos, socios, onGuard
     onGuardar({ ...form, monto: Number(form.monto), es_del_estudio: Boolean(form.es_del_estudio), socio_id: form.es_del_estudio ? null : form.socio_id });
   };
 
+  // Completa el formulario con lo leído de la factura por OCR.
+  // En un ingreso la factura la emite el estudio: el cliente es el receptor.
+  const handleDatosOCR = (datos) => {
+    const total = Number(datos.monto_total) || (Number(datos.monto_neto || 0) + Number(datos.iva || 0) + Number(datos.iibb || 0));
+    const cliente = buscarCoincidencia(clientes.filter(c => c.activo), { cuit: datos.cuit_receptor, nombre: datos.receptor }, 'nombre_razon_social');
+    setClienteDetectado(!cliente && datos.receptor ? { nombre: datos.receptor, cuit: datos.cuit_receptor || '' } : null);
+    setForm(p => ({
+      ...p,
+      cliente_id:  cliente ? cliente.id : p.cliente_id,
+      proyecto_id: cliente && cliente.id !== p.cliente_id ? '' : p.proyecto_id,
+      monto:       total > 0 ? String(total) : p.monto,
+      moneda:      datos.moneda === 'USD' || datos.moneda === 'ARS' ? datos.moneda : p.moneda,
+      tipo:        'facturado',
+      fecha:       datos.fecha || p.fecha,
+      comprobante: datos.numero_comprobante || p.comprobante,
+      descripcion: datos.descripcion || p.descripcion,
+      archivo_url: datos.archivo_url || p.archivo_url,
+    }));
+  };
+
   return (
     <form onSubmit={handleSubmit} noValidate>
+      <LectorComprobante endpoint="/ingresos/ocr" archivoUrl={form.archivo_url} onDatos={handleDatosOCR} />
+      {clienteDetectado && !form.cliente_id && (
+        <p style={{ margin: '-8px 0 12px', fontSize: '12px', color: '#8a5a00' }}>
+          La factura está dirigida a <strong>{clienteDetectado.nombre}</strong>{clienteDetectado.cuit ? ` (CUIT ${clienteDetectado.cuit})` : ''}, que no coincide con ningún cliente activo. Elegilo a mano o cargalo en Clientes y Proyectos.
+        </p>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <Campo label="Cliente *" error={errores.cliente_id}>
           <Select value={form.cliente_id} onChange={e => setForm(p => ({ ...p, cliente_id: e.target.value, proyecto_id: '' }))}>
@@ -254,7 +283,10 @@ export default function Ingresos() {
                 <Celda style={{ fontSize: '13px', color: '#666' }}>
                   {i.es_del_estudio ? '🏢 Estudio' : i.socio_nombre}
                 </Celda>
-                <Celda style={{ fontSize: '13px', color: '#999', fontFamily: 'monospace' }}>{i.comprobante || '—'}</Celda>
+                <Celda style={{ fontSize: '13px', color: '#999', fontFamily: 'monospace' }}>
+                  {i.comprobante || '—'}
+                  {i.archivo_url && <a href={i.archivo_url} target="_blank" rel="noopener noreferrer" title="Ver comprobante" style={{ marginLeft: '6px', textDecoration: 'none' }}>📎</a>}
+                </Celda>
                 <Celda align="right">
                   <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                     <Boton variante="secundario" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => setModal(i)}>Editar</Boton>

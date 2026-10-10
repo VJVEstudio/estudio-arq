@@ -2,6 +2,7 @@ const express = require('express');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 const { obtenerCotizacionOficial } = require('../utils/cotizacion');
+const { rutaOcr } = require('../utils/ocrUpload');
 
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
@@ -36,6 +37,9 @@ router.get('/', async (req, res) => {
   );
   res.json(rows);
 });
+
+// Lee una factura con OCR y la sube a Storage (no crea el egreso)
+router.post('/ocr', ...rutaOcr('egresos'));
 
 router.get('/resumen', async (req, res) => {
   const { desde, hasta } = req.query;
@@ -76,7 +80,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const {
     destinatario_id, proyecto_id, categoria, monto, moneda,
-    pagado_por_estudio, socio_id, fecha, comprobante, descripcion,
+    pagado_por_estudio, socio_id, fecha, comprobante, descripcion, archivo_url,
   } = req.body;
 
   if (!destinatario_id)         return res.status(400).json({ error: 'destinatario_id es obligatorio' });
@@ -96,8 +100,8 @@ const fechaEgreso = fecha || new Date().toISOString().split('T')[0];
     const { rows } = await client.query(
       `INSERT INTO egresos
          (destinatario_id, proyecto_id, categoria, monto, moneda,
-          pagado_por_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          pagado_por_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar, archivo_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        RETURNING *`,
       [
         destinatario_id,
@@ -111,6 +115,7 @@ const fechaEgreso = fecha || new Date().toISOString().split('T')[0];
         comprobante || null,
         descripcion || null,
         cotizacion_dolar,
+        archivo_url || null,
       ]
     );
     const egreso = rows[0];
@@ -152,7 +157,7 @@ const fechaEgreso = fecha || new Date().toISOString().split('T')[0];
 router.put('/:id', async (req, res) => {
   const {
     destinatario_id, proyecto_id, categoria, monto, moneda,
-    pagado_por_estudio, socio_id, fecha, comprobante, descripcion,
+    pagado_por_estudio, socio_id, fecha, comprobante, descripcion, archivo_url,
   } = req.body;
 
   if (!monto || monto <= 0) return res.status(400).json({ error: 'El monto debe ser mayor a 0' });
@@ -166,13 +171,14 @@ router.put('/:id', async (req, res) => {
 
     const { rows } = await client.query(
       `UPDATE egresos SET destinatario_id=$1, proyecto_id=$2, categoria=$3, monto=$4, moneda=$5,
-         pagado_por_estudio=$6, socio_id=$7, fecha=$8, comprobante=$9, descripcion=$10
-       WHERE id=$11 RETURNING *`,
+         pagado_por_estudio=$6, socio_id=$7, fecha=$8, comprobante=$9, descripcion=$10, archivo_url=$11
+       WHERE id=$12 RETURNING *`,
       [
         destinatario_id, proyecto_id || null, categoria, monto, moneda,
         pagado_por_estudio ?? true,
         pagado_por_estudio ? null : socio_id,
         fecha, comprobante || null, descripcion || null,
+        archivo_url || null,
         req.params.id,
       ]
     );

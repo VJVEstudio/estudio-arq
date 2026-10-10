@@ -10,6 +10,9 @@ async function leerComprobante(buffer, mimeType) {
 
 {
   "proveedor": "nombre de la empresa o persona que emite el comprobante",
+  "cuit_emisor": "CUIT de quien emite el comprobante, formato XX-XXXXXXXX-X",
+  "receptor": "nombre de la empresa o persona a quien está dirigido el comprobante (cliente)",
+  "cuit_receptor": "CUIT del receptor del comprobante, formato XX-XXXXXXXX-X",
   "descripcion": "breve descripción del concepto facturado",
   "numero_comprobante": "número de factura o comprobante, formato tipo A0001-00001234",
   "fecha": "fecha del comprobante en formato YYYY-MM-DD",
