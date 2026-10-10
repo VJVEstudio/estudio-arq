@@ -325,9 +325,29 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
       porProyecto[h.proyecto_id] += Number(h.horas);
     });
 
+    // Un egreso por proyecto: horas × tarifa + la parte del monotributo que le toca
+    // a ese proyecto (proporcional a sus horas). Se trabaja en centavos y la diferencia
+    // de redondeo va al último proyecto, así la suma de los egresos es exactamente
+    // el total de la liquidación (lo mismo que se transfiere al dibujante).
+    const proyectosLiq = Object.entries(porProyecto);
+    const totalCent = Math.round(monto_total * 100);
+    let asignadoCent = 0;
+    const montosPorProyecto = proyectosLiq.map(([pid, hs], i) => {
+      let cent;
+      if (i === proyectosLiq.length - 1) {
+        cent = totalCent - asignadoCent;
+      } else {
+        const horasCent = Math.round(hs * tarifaActual * 100);
+        const monoCent = horas_totales > 0 ? Math.round(monotributoMonto * 100 * (hs / horas_totales)) : 0;
+        cent = horasCent + monoCent;
+      }
+      asignadoCent += cent;
+      return [pid, cent / 100];
+    });
+    const descripcionEgreso = `Honorarios dibujante — ${mes}/${anio}${monotributoMonto > 0 ? ' (incluye monotributo)' : ''}`;
+
     const egresosCreados = [];
-    for (const [proyecto_id_actual, horas_proyecto] of Object.entries(porProyecto)) {
-      const monto_proyecto = Math.round(horas_proyecto * tarifaActual * 100) / 100;
+    for (const [proyecto_id_actual, monto_proyecto] of montosPorProyecto) {
       const { rows: [egreso] } = await client.query(`
         INSERT INTO egresos
           (destinatario_id, proyecto_id, categoria, monto, moneda, pagado_por_estudio, socio_id, fecha, descripcion)
@@ -339,7 +359,7 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
         monto_proyecto,
         pagado_por_estudio ?? true,
         pagado_por_estudio ? null : socio_id,
-        `Honorarios dibujante — ${mes}/${anio}`,
+        descripcionEgreso,
       ]);
       await client.query(`SELECT distribuir_egreso($1)`, [egreso.id]);
       egresosCreados.push(egreso);
