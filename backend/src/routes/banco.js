@@ -286,6 +286,63 @@ router.get('/movimientos', async (req, res) => {
   res.json(rows);
 });
 
+// ── Opciones para asociar a mano ─────────────────────────────────────────────
+// Para un débito: liquidaciones de horas y egresos sueltos de un destinatario que
+// todavía no están vinculados a ningún movimiento del banco, sin exigir que el
+// monto ni la fecha coincidan. Para un crédito: ingresos de un cliente.
+router.get('/movimientos/:id/opciones', async (req, res) => {
+  const { rows: [mov] } = await query(`SELECT * FROM banco_movimientos WHERE id = $1`, [req.params.id]);
+  if (!mov) return res.status(404).json({ error: 'Movimiento no encontrado' });
+  const cent = (n) => Math.round(Number(n) * 100);
+  const importe = Math.abs(cent(mov.importe));
+  const dias = (f) => Math.round(Math.abs((new Date(f) - new Date(mov.fecha)) / 86400000));
+  const conDiferencia = (x, monto) => ({ ...x, monto: Number(monto), diferencia: (importe - cent(monto)) / 100, dias: dias(x.fecha) });
+  const ordenar = (a, b) => Math.abs(a.diferencia) - Math.abs(b.diferencia) || a.dias - b.dias;
+
+  if (Number(mov.importe) > 0) {
+    const { cliente_id } = req.query;
+    if (!cliente_id) return res.json({ ingresos: [] });
+    const { rows } = await query(
+      `SELECT i.id, i.fecha, i.monto, i.descripcion, i.comprobante, p.nombre AS proyecto
+       FROM ingresos i LEFT JOIN proyectos p ON p.id = i.proyecto_id
+       WHERE i.cliente_id = $1 AND i.moneda = 'ARS'
+         AND NOT EXISTS (SELECT 1 FROM banco_movimientos b WHERE b.ingreso_id = i.id)
+       ORDER BY i.fecha DESC LIMIT 100`, [cliente_id]);
+    return res.json({ ingresos: rows.map(r => conDiferencia(r, r.monto)).sort(ordenar) });
+  }
+
+  const { destinatario_id } = req.query;
+  if (!destinatario_id) return res.json({ liquidaciones: [], egresos: [] });
+  const [{ rows: liqs }, { rows: egs }] = await Promise.all([
+    query(
+      `SELECT l.id, l.mes, l.anio, l.monto_total, COALESCE(l.monotributo_monto, 0) AS monotributo,
+              base.fecha, json_agg(e.id) AS egreso_ids, SUM(e.monto) AS monto_egresos, COUNT(*)::int AS cantidad,
+              string_agg(DISTINCT p.nombre, ', ') AS proyectos
+       FROM liquidaciones_dibujantes l
+       JOIN egresos base ON base.id = l.egreso_id
+       JOIN egresos e    ON e.destinatario_id = base.destinatario_id AND e.fecha = base.fecha
+                        AND e.categoria = 'dibujantes' AND COALESCE(e.descripcion,'') = COALESCE(base.descripcion,'')
+       LEFT JOIN proyectos p ON p.id = e.proyecto_id
+       WHERE base.destinatario_id = $1 AND base.moneda = 'ARS'
+       GROUP BY l.id, l.mes, l.anio, l.monto_total, l.monotributo_monto, base.fecha
+       HAVING bool_and(NOT EXISTS (SELECT 1 FROM banco_movimiento_egresos x WHERE x.egreso_id = e.id))
+       ORDER BY base.fecha DESC LIMIT 60`, [destinatario_id]),
+    query(
+      `SELECT e.id, e.fecha, e.monto, e.descripcion, e.categoria, p.nombre AS proyecto
+       FROM egresos e LEFT JOIN proyectos p ON p.id = e.proyecto_id
+       WHERE e.destinatario_id = $1 AND e.moneda = 'ARS' AND ${EGRESO_LIBRE}
+         AND NOT EXISTS (SELECT 1 FROM liquidaciones_dibujantes l JOIN egresos b ON b.id = l.egreso_id
+                         WHERE b.destinatario_id = e.destinatario_id AND b.fecha = e.fecha AND e.categoria = 'dibujantes'
+                           AND COALESCE(b.descripcion,'') = COALESCE(e.descripcion,''))
+       ORDER BY e.fecha DESC LIMIT 100`, [destinatario_id]),
+  ]);
+  res.json({
+    // La diferencia se mide contra el total liquidado (horas + monotributo)
+    liquidaciones: liqs.map(l => conDiferencia({ ...l, monto_egresos: Number(l.monto_egresos) }, l.monto_total)).sort(ordenar),
+    egresos: egs.map(e => conDiferencia(e, e.monto)).sort(ordenar),
+  });
+});
+
 // ── Acciones sobre un movimiento ─────────────────────────────────────────────
 router.post('/movimientos/:id/vincular', async (req, res) => {
   const { ingreso_id, creado, liquidacion_id } = req.body;
