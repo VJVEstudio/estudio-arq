@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
+import { agruparLiquidaciones } from '../../lib/agruparLiquidaciones';
 import { useEgresos, useDestinatarios } from '../../hooks/useEgresos';
 import { get } from '../../lib/api';
 import {
@@ -274,6 +275,7 @@ export default function Egresos() {
   const [filtros,     setFiltros]     = useState({ categoria: '', moneda: '', desde: '', hasta: '' });
   const [buscar,      setBuscar]      = useState('');
   const [modal,       setModal]       = useState(null);
+  const [abiertos, setAbiertos] = useState(() => new Set());
   const [guardando,   setGuardando]   = useState(false);
   const [eliminando,  setEliminando]  = useState(false);
   const [errorAccion, setErrorAccion] = useState('');
@@ -356,11 +358,12 @@ export default function Egresos() {
               { campo: 'comprobante', tipo: 'texto' },
               null,
             ]}
-            datos={egresosFiltrados}
+            datos={agruparLiquidaciones(egresosFiltrados)}
             vacio="No hay egresos registrados."
-            renderFila={(e) => (
+            renderFila={(g) => {
+              const fila = (e, sub = false) => (
               <Fila key={e.id}>
-                <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{fmtFecha(e.fecha)}</Celda>
+                <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{sub ? '↳ ' : ''}{fmtFecha(e.fecha)}</Celda>
                 <Celda><span style={{ fontWeight: 500 }}>{e.destinatario_nombre}</span></Celda>
                 <Celda><BadgeCategoria cat={e.categoria} /></Celda>
                 <Celda style={{ color: '#666', fontSize: '13px' }}>{e.proyecto_nombre || '—'}</Celda>
@@ -377,7 +380,33 @@ export default function Egresos() {
                   </div>
                 </Celda>
               </Fila>
-            )}
+              );
+              if (!g._grupo) return fila(g);
+              // Liquidación de horas: una fila con el total; ▸ despliega el egreso de cada proyecto
+              const abierto = abiertos.has(g.id);
+              const alternar = () => setAbiertos(a => { const n = new Set(a); if (n.has(g.id)) n.delete(g.id); else n.add(g.id); return n; });
+              return (
+                <Fragment key={g.id}>
+                  <Fila>
+                    <Celda style={{ whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{fmtFecha(g.fecha)}</Celda>
+                    <Celda><span style={{ fontWeight: 500 }}>{g.destinatario_nombre}</span></Celda>
+                    <Celda><BadgeCategoria cat={g.categoria} /></Celda>
+                    <Celda style={{ color: '#666', fontSize: '13px' }}>
+                      <button onClick={alternar} title={g.proyectos.join(', ')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#1a2744', fontSize: '13px', fontFamily: 'inherit' }}>
+                        {abierto ? '▾' : '▸'} {g.proyecto_nombre}
+                      </button>
+                    </Celda>
+                    <Celda><span style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(g.monto, g.moneda)}</span></Celda>
+                    <Celda style={{ fontSize: '13px', color: '#666' }}>{g.pagado_por_estudio ? '🏢 Estudio' : g.socio_nombre}</Celda>
+                    <Celda style={{ fontSize: '13px', color: '#666' }}>Liquidación {g.periodo}</Celda>
+                    <Celda align="right">
+                      <Boton variante="secundario" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={alternar}>{abierto ? 'Ocultar' : 'Ver detalle'}</Boton>
+                    </Celda>
+                  </Fila>
+                  {abierto && g.items.map(it => fila(it, true))}
+                </Fragment>
+              );
+            }}
           />
         </div>
       )}
