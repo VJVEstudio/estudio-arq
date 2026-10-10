@@ -82,6 +82,7 @@ router.get('/proyecto/:id', async (req, res) => {
       USD: { ingresos: totales.USD.ingresos, egresos: totales.USD.egresos, resultado: totales.USD.ingresos - totales.USD.egresos },
     },
     resultado_total_convertido: resultadoTotalConvertido,
+    cotizacion_oficial: cotizacionActual,
     horas_resumen: { total_horas: horasTotales, costo_total: costoHoras, por_dibujante: porDibujante },
     timeline,
   });
@@ -292,6 +293,14 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
   const totalEgresosARS = egresos.filter(e => e.moneda === 'ARS').reduce((s, e) => s + Number(e.monto), 0);
   const costoHoras = horas.reduce((s, h) => s + Number(h.costo_actual), 0);
   const resultadoARS = totalIngresosARS - totalEgresosARS - costoHoras;
+  // Resultado total en pesos: los dólares se convierten a la cotización del día en que
+  // se registró cada movimiento (o a la de hoy si no la tiene), igual que en el reporte general.
+  const enPesos = (x) => Number(x.monto) * Number(x.cotizacion_dolar || cotizacionActual || 0);
+  const ingresosUSD = ingresos.filter(i => i.moneda === 'USD');
+  const egresosUSD = egresos.filter(e => e.moneda === 'USD');
+  const totalIngresosUSD = ingresosUSD.reduce((s, i) => s + Number(i.monto), 0);
+  const totalEgresosUSD = egresosUSD.reduce((s, e) => s + Number(e.monto), 0);
+  const resultadoTotal = resultadoARS + ingresosUSD.reduce((s, i) => s + enPesos(i), 0) - egresosUSD.reduce((s, e) => s + enPesos(e), 0);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="reporte_${proyecto.nombre.replace(/\s+/g,'_')}.pdf"`);
@@ -322,7 +331,8 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
 
   // Resumen financiero
   const yRes = doc.y;
-  doc.rect(margen, yRes, ancho, 80).fillAndStroke('#f8f9fa', '#e0e0e0');
+  const hayUSD = totalIngresosUSD || totalEgresosUSD;
+  doc.rect(margen, yRes, ancho, hayUSD ? 112 : 96).fillAndStroke('#f8f9fa', '#e0e0e0');
   const colW = ancho / 3;
   [
     { label: 'Ingresos ARS', valor: fmtM(totalIngresosARS), color: '#1b5e20' },
@@ -334,9 +344,20 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
     doc.fillColor(item.color).fontSize(13).font('Helvetica-Bold').text(item.valor, x, yRes + 26, { width: colW - 32 });
   });
   // Resultado neto
-  doc.fillColor(resultadoARS >= 0 ? '#1b5e20' : '#b71c1c').fontSize(11).font('Helvetica-Bold')
-    .text(`Resultado neto: ${resultadoARS >= 0 ? '+' : ''}${fmtM(resultadoARS)}`, margen + 16, yRes + 54, { width: ancho - 32 });
-  doc.y = yRes + 90;
+  doc.fillColor(resultadoARS >= 0 ? '#1b5e20' : '#b71c1c').fontSize(10).font('Helvetica-Bold')
+    .text(`Resultado ARS: ${resultadoARS >= 0 ? '+' : ''}${fmtM(resultadoARS)}`, margen + 16, yRes + 52, { width: ancho - 32 });
+  let yLinea = yRes + 66;
+  if (hayUSD) {
+    const resUSD = totalIngresosUSD - totalEgresosUSD;
+    doc.fillColor(resUSD >= 0 ? '#1b5e20' : '#b71c1c').fontSize(10).font('Helvetica-Bold')
+      .text(`Resultado USD: ${resUSD >= 0 ? '+' : ''}${fmtM(resUSD, 'USD')}`, margen + 16, yLinea, { width: ancho - 32 });
+    yLinea += 14;
+  }
+  doc.fillColor(resultadoTotal >= 0 ? '#1b5e20' : '#b71c1c').fontSize(12).font('Helvetica-Bold')
+    .text(`Resultado total ($): ${resultadoTotal >= 0 ? '+' : ''}${fmtM(resultadoTotal)}`, margen + 16, yLinea + 2, { width: ancho - 32 });
+  doc.fillColor('#999').fontSize(8).font('Helvetica')
+    .text('Dólares convertidos a la cotización del día de cada registro.', margen + 16, yLinea + 18, { width: ancho - 32 });
+  doc.y = yRes + (hayUSD ? 122 : 106);
   doc.moveDown(0.5);
 
   // Sección helper
