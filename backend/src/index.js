@@ -26,6 +26,7 @@ app.use('/api/horas',         require('./routes/horas'));
 app.use('/api/reportes',      require('./routes/reportes'));
 app.use('/api/socios',        require('./routes/socios'));
 app.use('/api/rendiciones',   require('./routes/rendiciones'));
+app.use('/api/banco',         require('./routes/banco'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

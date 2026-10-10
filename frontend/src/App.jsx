@@ -11,6 +11,7 @@ import ClientesProyectos from './pages/admin/ClientesProyectos';
 import Ingresos        from './pages/admin/Ingresos';
 import Egresos         from './pages/admin/Egresos';
 import MovimientosFinancieros from './pages/admin/MovimientosFinancieros';
+import Banco from './pages/admin/Banco';
 import Rendiciones from './pages/admin/Rendiciones';
 import RendicionDetalle from './pages/admin/RendicionDetalle';import Balance         from './pages/admin/Balance';
 import Dibujantes      from './pages/admin/Dibujantes';
@@ -35,6 +36,7 @@ export default function App() {
               <Route path="/admin/ingresos"                element={<Ingresos />} />
               <Route path="/admin/egresos"                 element={<Egresos />} />
 <Route path="/admin/movimientos"             element={<MovimientosFinancieros />} />
+              <Route path="/admin/banco"                   element={<Banco />} />
               <Route path="/admin/rendiciones"             element={<Rendiciones />} />
               <Route path="/admin/rendiciones/:id"         element={<RendicionDetalle />} />              <Route path="/admin/balance"               element={<Balance />} />
               <Route path="/admin/dibujantes"            element={<Dibujantes />} />
