@@ -111,6 +111,14 @@ export default function Clientes() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
             columnas={['Nombre / Razón social', 'CUIT', 'Contacto', 'Proyectos activos', 'Estado', '']}
+            ordenable={[
+              { campo: 'nombre_razon_social', tipo: 'texto' },
+              { campo: 'cuit', tipo: 'texto' },
+              { campo: 'email', tipo: 'texto', valor: (f) => f.email || f.telefono },
+              { campo: 'proyectos_activos', tipo: 'numero' },
+              { campo: 'activo', tipo: 'texto', valor: (f) => f.activo ? 'Activo' : 'Finalizado' },
+              null,
+            ]}
             datos={clientes}
             vacio="No hay clientes. Creá el primero."
             renderFila={(c) => (

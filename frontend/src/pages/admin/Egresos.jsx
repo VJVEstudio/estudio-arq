@@ -320,6 +320,16 @@ export default function Egresos() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
             columnas={['Fecha', 'Destinatario', 'Categoría', 'Proyecto', 'Monto', 'Pagó', 'Comprobante', '']}
+            ordenable={[
+              { campo: 'fecha', tipo: 'fecha' },
+              { campo: 'destinatario_nombre', tipo: 'texto' },
+              { campo: 'categoria', tipo: 'texto' },
+              { campo: 'proyecto_nombre', tipo: 'texto' },
+              { campo: 'monto', tipo: 'monto', valor: (f) => [f.moneda, f.monto] },
+              { campo: 'socio_nombre', tipo: 'texto', valor: (f) => f.pagado_por_estudio ? 'Estudio' : f.socio_nombre },
+              { campo: 'comprobante', tipo: 'texto' },
+              null,
+            ]}
             datos={egresosFiltrados}
             vacio="No hay egresos registrados."
             renderFila={(e) => (

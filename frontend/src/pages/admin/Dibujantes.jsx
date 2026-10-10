@@ -301,6 +301,17 @@ export default function Dibujantes() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
             columnas={['Nombre', 'Tarifa actual', 'Monotributo', 'Inicio', 'Proyectos', 'Horas totales', 'Costo total', 'Estado', '']}
+            ordenable={[
+              { campo: 'nombre', tipo: 'texto' },
+              { campo: 'tarifa_hora_base', tipo: 'numero' },
+              { campo: 'monotributo_monto', tipo: 'numero', valor: (f) => f.monotributo_activo ? f.monotributo_monto : null },
+              { campo: 'fecha_inicio', tipo: 'fecha' },
+              { campo: 'proyectos_trabajados', tipo: 'numero' },
+              { campo: 'horas_totales', tipo: 'numero' },
+              { campo: 'costo_total_historico', tipo: 'numero' },
+              { campo: 'usuario_activo', tipo: 'texto', valor: (f) => f.usuario_activo ? 'Activo' : 'Inactivo' },
+              null,
+            ]}
             datos={dibujantes}
             vacio="No hay dibujantes. Agregá el primero."
             renderFila={(d) => (

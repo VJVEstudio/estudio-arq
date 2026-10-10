@@ -210,6 +210,16 @@ export default function MovimientosFinancieros() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
             columnas={['Fecha', 'Tipo', 'Cliente / Destinatario', 'Proyecto', 'Monto', 'Detalle', 'Comprobante', '']}
+            ordenable={[
+              { campo: 'fecha', tipo: 'fecha' },
+              { campo: '_tipo', tipo: 'texto' },
+              { campo: 'nombre', tipo: 'texto', valor: (f) => f._tipo === 'ingreso' ? f.cliente_nombre : f.destinatario_nombre },
+              { campo: 'proyecto_nombre', tipo: 'texto' },
+              { campo: 'monto', tipo: 'monto', valor: (f) => [f.moneda, f.monto] },
+              { campo: 'detalle', tipo: 'texto', valor: (f) => f._tipo === 'ingreso' ? f.tipo : f.categoria },
+              { campo: 'comprobante', tipo: 'texto' },
+              null,
+            ]}
             datos={movimientos}
             vacio="No hay movimientos para los filtros seleccionados."
             renderFila={(m) => (
