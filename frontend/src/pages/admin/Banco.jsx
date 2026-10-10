@@ -178,8 +178,8 @@ function Sugerencia({ m, eleccion, onElegir }) {
   if (m.destinatario_es_dibujante) {
     return (
       <span style={{ fontSize: '12px', color: '#8a5a00' }}>
-        Pago a <strong>{quien}</strong> (dibujante) sin liquidación que coincida. Si es el pago de horas, liquidalas
-        primero en <strong>Horas</strong> y después vinculá este pago, así no se duplica.
+        Pago a <strong>{quien}</strong> (dibujante) sin liquidación con el mismo monto. Con <strong>Asociar…</strong> elegís
+        la liquidación que corresponde; si todavía no la hiciste, liquidá primero en <strong>Horas</strong>.
       </span>
     );
   }
@@ -189,6 +189,91 @@ function Sugerencia({ m, eleccion, onElegir }) {
         ? <>Nuevo {Number(m.importe) > 0 ? 'ingreso de' : 'egreso a'} <strong>{quien}</strong>{m.proyecto_sugerido_nombre && <> · {m.proyecto_sugerido_nombre}</>}</>
         : m.cuit ? <>CUIT {fmtCuit(m.cuit)} sin cargar en la app</> : 'Sin coincidencias'}
     </span>
+  );
+}
+
+// ── Asociar a mano con un registro existente ─────────────────────────────────
+function ModalAsociar({ mov, clientes, destinatarios, onCerrar, onVincular }) {
+  const credito = Number(mov.importe) > 0;
+  const [quien, setQuien] = useState(credito ? (mov.cliente_sugerido_id || '') : (mov.destinatario_sugerido_id || ''));
+  const [opciones, setOpciones] = useState(null);
+  const [cargando, setCargando] = useState(false);
+  const [elegido, setElegido] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setElegido(null); setOpciones(null); setError('');
+    if (!quien) return;
+    setCargando(true);
+    get(`/banco/movimientos/${mov.id}/opciones?${credito ? 'cliente_id' : 'destinatario_id'}=${quien}`)
+      .then(setOpciones).catch(err => setError(err.message)).finally(() => setCargando(false));
+  }, [quien, mov.id, credito]);
+
+  const confirmar = async () => {
+    setGuardando(true); setError('');
+    try {
+      await onVincular(elegido.tipo === 'ingreso' ? { ingreso_id: elegido.id }
+        : elegido.tipo === 'liquidacion' ? { egreso_ids: elegido.egreso_ids, liquidacion_id: elegido.id }
+        : { egreso_ids: [elegido.id] });
+    } catch (err) { setError(err.message); setGuardando(false); }
+  };
+
+  const Opcion = ({ x, tipo, titulo, detalle }) => {
+    const sel = elegido && elegido.tipo === tipo && String(elegido.id) === String(x.id);
+    return (
+      <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', background: sel ? '#eef2ff' : 'transparent' }}>
+        <input type="radio" name="asociar" checked={Boolean(sel)} onChange={() => setElegido({ ...x, tipo })} style={{ marginTop: '3px' }} />
+        <span style={{ flex: 1, fontSize: '13px' }}>
+          <strong>{titulo}</strong>
+          <span style={{ display: 'block', fontSize: '12px', color: '#666' }}>{detalle}</span>
+        </span>
+        <span style={{ textAlign: 'right', fontSize: '13px', whiteSpace: 'nowrap' }}>
+          <strong>{fmt(x.monto)}</strong>
+          <span style={{ display: 'block', fontSize: '11px', color: x.diferencia === 0 ? '#1b5e20' : '#b26a00' }}>
+            {x.diferencia === 0 ? '✓ mismo monto' : `diferencia ${fmt(x.diferencia)}`}
+          </span>
+        </span>
+      </label>
+    );
+  };
+
+  const liqs = opciones?.liquidaciones || [], egs = opciones?.egresos || [], ings = opciones?.ingresos || [];
+  const vacio = opciones && !liqs.length && !egs.length && !ings.length;
+  const lista = credito ? clientes.filter(c => c.activo !== false).map(c => ({ id: c.id, nombre: c.nombre_razon_social }))
+    : destinatarios.map(d => ({ id: d.id, nombre: d.nombre }));
+
+  return (
+    <Modal titulo={`Asociar ${credito ? 'cobro' : 'pago'} del banco — ${fmt(mov.importe)}`} onCerrar={onCerrar} ancho={680}>
+      <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>Banco: {fmtF(mov.fecha)} · {mov.descripcion}</p>
+      <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>{credito ? 'Cliente' : 'Destinatario'}</label>
+      <select value={quien} onChange={e => setQuien(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #d0d0d0', fontSize: '14px', marginBottom: '14px', fontFamily: 'inherit' }}>
+        <option value="">Seleccioná…</option>
+        {[...lista].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')).map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+      </select>
+      {error && <AlertaError mensaje={error} onCerrar={() => setError('')} />}
+      {cargando && <p style={{ fontSize: '13px', color: '#666' }}>Buscando…</p>}
+      {vacio && <p style={{ fontSize: '13px', color: '#666' }}>No hay {credito ? 'ingresos' : 'liquidaciones ni egresos'} sin vincular para {credito ? 'este cliente' : 'este destinatario'}.</p>}
+      {opciones && !vacio && (
+        <div style={{ border: '1px solid #e0e0e0', borderRadius: '10px', maxHeight: '340px', overflowY: 'auto', marginBottom: '14px' }}>
+          {liqs.length > 0 && <p style={{ margin: 0, padding: '8px 12px', fontSize: '11px', color: '#666', textTransform: 'uppercase', background: '#fafafa' }}>Liquidaciones de horas</p>}
+          {liqs.map(l => <Opcion key={'l' + l.id} x={l} tipo="liquidacion" titulo={`Liquidación ${l.mes}/${l.anio}`}
+            detalle={`Liquidada el ${fmtF(l.fecha)} · ${l.cantidad} egreso${l.cantidad > 1 ? 's' : ''}${l.proyectos ? ` (${l.proyectos})` : ''}${l.monotributo ? ` · incluye monotributo ${fmt(l.monotributo)}` : ''}`} />)}
+          {egs.length > 0 && <p style={{ margin: 0, padding: '8px 12px', fontSize: '11px', color: '#666', textTransform: 'uppercase', background: '#fafafa' }}>Egresos</p>}
+          {egs.map(e => <Opcion key={'e' + e.id} x={e} tipo="egreso" titulo={`Egreso del ${fmtF(e.fecha)}`} detalle={[e.proyecto, e.descripcion].filter(Boolean).join(' · ') || '—'} />)}
+          {ings.map(i => <Opcion key={'i' + i.id} x={i} tipo="ingreso" titulo={`Ingreso del ${fmtF(i.fecha)}`} detalle={[i.proyecto, i.comprobante, i.descripcion].filter(Boolean).join(' · ') || '—'} />)}
+        </div>
+      )}
+      {elegido && elegido.diferencia !== 0 && (
+        <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#7a4b00', background: '#fff8e1', border: '1px solid #ffe082', borderRadius: '8px', padding: '8px 10px' }}>
+          El monto del banco y el del registro no coinciden (diferencia de {fmt(elegido.diferencia)}). Se vincula igual; si la diferencia es un gasto aparte, cargalo como egreso.
+        </p>
+      )}
+      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+        <Boton variante="secundario" onClick={onCerrar}>Cancelar</Boton>
+        <Boton onClick={confirmar} disabled={!elegido || guardando}>{guardando ? 'Vinculando…' : 'Vincular'}</Boton>
+      </div>
+    </Modal>
   );
 }
 
@@ -410,6 +495,7 @@ export default function Banco() {
                                 {credito ? '+ Ingreso' : '+ Egreso'}
                               </Boton>
                             )}
+                            {m.clase !== 'inversion' && <Boton variante="secundario" style={btn} disabled={espera} onClick={() => setModal({ tipo: 'asociar', mov: m })} title="Elegir un registro ya cargado aunque el monto o la fecha no coincidan">Asociar…</Boton>}
                             {m.clase !== 'inversion' && <Boton variante="secundario" style={btn} disabled={espera} onClick={() => cambiarEstado(m, 'inversion')} title="Movimiento de fondos de inversión">Fondo</Boton>}
                             <Boton variante="secundario" style={btn} disabled={espera} onClick={() => cambiarEstado(m, 'ignorado')} title="No se registra (por ejemplo, transferencia entre cuentas propias)">Ignorar</Boton>
                           </>
@@ -429,6 +515,10 @@ export default function Banco() {
         </>
       )}
 
+      {modal?.tipo === 'asociar' && (
+        <ModalAsociar mov={modal.mov} clientes={clientes} destinatarios={destinatarios} onCerrar={() => setModal(null)}
+          onVincular={async (datos) => { await post(`/banco/movimientos/${modal.mov.id}/vincular`, datos); setModal(null); await cargar(); }} />
+      )}
       {modal?.tipo === 'crear-ingreso' && (
         <Modal titulo={`Nuevo ingreso desde el banco — ${fmt(modal.mov.importe)}`} onCerrar={() => setModal(null)} ancho={680}>
           <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#666' }}>Banco: {fmtF(modal.mov.fecha)} · {modal.mov.descripcion}</p>
