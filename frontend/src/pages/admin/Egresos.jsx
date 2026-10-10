@@ -5,6 +5,7 @@ import {
   EncabezadoSeccion, Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, Textarea, AlertaError, Buscador,
 } from '../../components/ui';
+import LectorComprobante, { buscarCoincidencia } from '../../components/LectorComprobante';
 
 const CATEGORIAS = [
   { value: 'servicios',  label: 'Servicios' },
@@ -60,8 +61,8 @@ function TarjetasResumen({ resumen }) {
   );
 }
 
-function NuevoDestinatario({ onCrear, onCancelar }) {
-  const [form, setForm] = useState({ nombre: '', tipo: 'otro', cuit: '', cbu: '', notas: '' });
+function NuevoDestinatario({ inicial = {}, onCrear, onCancelar }) {
+  const [form, setForm] = useState({ nombre: inicial.nombre || '', tipo: 'otro', cuit: inicial.cuit || '', cbu: '', notas: '' });
   const [guardando, setGuardando] = useState(false);
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   const handleCrear = async (e) => {
@@ -106,8 +107,10 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
     fecha:              inicial.fecha              || new Date().toISOString().split('T')[0],
     comprobante:        inicial.comprobante        || '',
     descripcion:        inicial.descripcion        || '',
+    archivo_url:        inicial.archivo_url        || '',
   });
   const [mostrarNuevoDest, setMostrarNuevoDest] = useState(false);
+  const [proveedorDetectado, setProveedorDetectado] = useState(null);
   const [errores, setErrores] = useState({});
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
 
@@ -131,10 +134,29 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
     const nuevo = await onNuevoDestinatario(datos);
     setForm(p => ({ ...p, destinatario_id: nuevo.id }));
     setMostrarNuevoDest(false);
+    setProveedorDetectado(null);
+  };
+
+  // Completa el formulario con lo leído de la factura por OCR
+  const handleDatosOCR = (datos) => {
+    const total = Number(datos.monto_total) || (Number(datos.monto_neto || 0) + Number(datos.iva || 0) + Number(datos.iibb || 0));
+    const dest = buscarCoincidencia(destinatarios, { cuit: datos.cuit_emisor, nombre: datos.proveedor }, 'nombre');
+    setProveedorDetectado(!dest && datos.proveedor ? { nombre: datos.proveedor, cuit: datos.cuit_emisor || '' } : null);
+    setForm(p => ({
+      ...p,
+      destinatario_id: dest ? dest.id : p.destinatario_id,
+      monto:       total > 0 ? String(total) : p.monto,
+      moneda:      datos.moneda === 'USD' || datos.moneda === 'ARS' ? datos.moneda : p.moneda,
+      fecha:       datos.fecha || p.fecha,
+      comprobante: datos.numero_comprobante || p.comprobante,
+      descripcion: datos.descripcion || p.descripcion,
+      archivo_url: datos.archivo_url || p.archivo_url,
+    }));
   };
 
   return (
     <form onSubmit={handleSubmit} noValidate>
+      <LectorComprobante endpoint="/egresos/ocr" archivoUrl={form.archivo_url} onDatos={handleDatosOCR} />
       <Campo label="Destinatario *" error={errores.destinatario_id}>
         <div style={{ display: 'flex', gap: '8px' }}>
           <Select value={form.destinatario_id} onChange={set('destinatario_id')} style={{ flex: 1 }}>
@@ -150,7 +172,13 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
           </Boton>
         </div>
       </Campo>
-      {mostrarNuevoDest && <NuevoDestinatario onCrear={handleNuevoDestinatario} onCancelar={() => setMostrarNuevoDest(false)} />}
+      {proveedorDetectado && !mostrarNuevoDest && !form.destinatario_id && (
+        <p style={{ margin: '-8px 0 12px', fontSize: '12px', color: '#8a5a00' }}>
+          La factura es de <strong>{proveedorDetectado.nombre}</strong>{proveedorDetectado.cuit ? ` (CUIT ${proveedorDetectado.cuit})` : ''}, que no está cargado como destinatario.{' '}
+          <Boton type="button" variante="texto" style={{ fontSize: '12px', padding: 0 }} onClick={() => setMostrarNuevoDest(true)}>Crearlo</Boton>
+        </p>
+      )}
+      {mostrarNuevoDest && <NuevoDestinatario inicial={proveedorDetectado || {}} onCrear={handleNuevoDestinatario} onCancelar={() => setMostrarNuevoDest(false)} />}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <Campo label="Categoría">
           <Select value={form.categoria} onChange={set('categoria')}>
@@ -302,7 +330,10 @@ export default function Egresos() {
                 <Celda style={{ color: '#666', fontSize: '13px' }}>{e.proyecto_nombre || '—'}</Celda>
                 <Celda><span style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(e.monto, e.moneda)}</span></Celda>
                 <Celda style={{ fontSize: '13px', color: '#666' }}>{e.pagado_por_estudio ? '🏢 Estudio' : e.socio_nombre}</Celda>
-                <Celda style={{ fontSize: '13px', color: '#999', fontFamily: 'monospace' }}>{e.comprobante || '—'}</Celda>
+                <Celda style={{ fontSize: '13px', color: '#999', fontFamily: 'monospace' }}>
+                  {e.comprobante || '—'}
+                  {e.archivo_url && <a href={e.archivo_url} target="_blank" rel="noopener noreferrer" title="Ver comprobante" style={{ marginLeft: '6px', textDecoration: 'none' }}>📎</a>}
+                </Celda>
                 <Celda align="right">
                   <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                     <Boton variante="secundario" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => setModal(e)}>Editar</Boton>

@@ -235,7 +235,10 @@ export default function MovimientosFinancieros() {
                 <Celda style={{ fontSize: '13px' }}>
                   {m._tipo === 'ingreso' ? <Badge estado={m.tipo} /> : <BadgeCategoria cat={m.categoria} />}
                 </Celda>
-                <Celda style={{ fontSize: '13px', color: '#999', fontFamily: 'monospace' }}>{m.comprobante || '—'}</Celda>
+                <Celda style={{ fontSize: '13px', color: '#999', fontFamily: 'monospace' }}>
+                  {m.comprobante || '—'}
+                  {m.archivo_url && <a href={m.archivo_url} target="_blank" rel="noopener noreferrer" title="Ver comprobante" style={{ marginLeft: '6px', textDecoration: 'none' }}>📎</a>}
+                </Celda>
                 <Celda align="right">
                   <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                     <Boton variante="secundario" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => setModal(m)}>Editar</Boton>

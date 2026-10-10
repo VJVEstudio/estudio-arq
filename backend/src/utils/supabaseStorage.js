@@ -7,8 +7,9 @@ const supabase = createClient(
 
 const BUCKET = 'comprobantes-rendiciones';
 
-async function subirArchivo(buffer, nombreArchivo, mimeType) {
-  const rutaArchivo = `${Date.now()}-${nombreArchivo}`;
+async function subirArchivo(buffer, nombreArchivo, mimeType, carpeta = '') {
+  const prefijo = carpeta ? `${carpeta}/` : '';
+  const rutaArchivo = `${prefijo}${Date.now()}-${nombreArchivo}`;
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(rutaArchivo, buffer, { contentType: mimeType, upsert: false });
