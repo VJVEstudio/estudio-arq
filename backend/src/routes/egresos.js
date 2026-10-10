@@ -14,9 +14,18 @@ const EXTRACCION = 'extraccion_socio';
 // Si la base limita las categorías (tipo enum o restricción CHECK), suma la nueva.
 // Se hace una sola vez; si falla, se registra y la app sigue funcionando.
 let categoriasListas = null;
+let errorEsquema = null;
 function asegurarCategorias() {
   if (!categoriasListas) {
     categoriasListas = (async () => {
+      // El socio que retira va en su propia columna: así una extracción queda como
+      // "pagó el estudio, sin socio", que es lo que esperan las reglas existentes.
+      const { rows: [tipoSocio] } = await query(
+        `SELECT data_type FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'socios' AND column_name = 'id'`);
+      await query(
+        `ALTER TABLE egresos ADD COLUMN IF NOT EXISTS socio_retiro_id ${tipoSocio?.data_type === 'uuid' ? 'UUID' : 'INTEGER'}
+           REFERENCES socios(id) ON DELETE SET NULL`);
       const { rows: [col] } = await query(
         `SELECT data_type, udt_name FROM information_schema.columns
          WHERE table_schema = 'public' AND table_name = 'egresos' AND column_name = 'categoria'`);
@@ -36,16 +45,29 @@ function asegurarCategorias() {
           console.log(`Categoría ${EXTRACCION} agregada a la restricción ${c.conname}`);
         }
       }
-    })().catch(err => { console.error('No se pudo agregar la categoría de extracción:', err.message); });
+      errorEsquema = null;
+    })().catch(err => {
+      errorEsquema = err.message;
+      categoriasListas = null; // se reintenta en el próximo pedido
+      console.error('No se pudo preparar la tabla de egresos para extracciones:', err.message);
+    });
   }
   return categoriasListas;
 }
 router.use(async (req, res, next) => { await asegurarCategorias(); next(); });
 
-// Quién figura como socio del egreso: el que pagó de su bolsillo, o el que retira
+// Socio del egreso: el que pagó de su bolsillo (socio_id) o, en una extracción, el que
+// retira (socio_retiro_id). Una extracción siempre sale de la cuenta del estudio.
 function datosSocio({ categoria, pagado_por_estudio, socio_id }) {
-  if (categoria === EXTRACCION) return { pagado: true, socio: socio_id || null };
-  return { pagado: pagado_por_estudio ?? true, socio: pagado_por_estudio ? null : socio_id };
+  if (categoria === EXTRACCION) return { pagado: true, socio: null, retiro: socio_id || null };
+  return { pagado: pagado_por_estudio ?? true, socio: pagado_por_estudio ? null : socio_id, retiro: null };
+}
+
+// Mensaje de error con la causa real (la app es interna, solo para administradores)
+function mensajeError(base, err) {
+  const causa = err?.detail || err?.message || '';
+  const extra = errorEsquema ? ` (preparación de la tabla: ${errorEsquema})` : '';
+  return `${base}${causa ? `: ${causa}` : ''}${extra}`;
 }
 
 router.get('/', async (req, res) => {
@@ -61,6 +83,7 @@ router.get('/', async (req, res) => {
   const { rows } = await query(
     `SELECT e.*, d.nombre AS destinatario_nombre, d.tipo AS destinatario_tipo,
             p.nombre AS proyecto_nombre, s.nombre AS socio_nombre,
+            COALESCE(e.socio_retiro_id, e.socio_id) AS socio_id,
             COALESCE(json_agg(json_build_object(
               'socio_id', esc.socio_id, 'socio_nombre', sc.nombre,
               'monto_adeudado', esc.monto_adeudado, 'porcentaje', esc.porcentaje
@@ -68,7 +91,7 @@ router.get('/', async (req, res) => {
      FROM egresos e
      JOIN destinatarios d ON d.id = e.destinatario_id
      LEFT JOIN proyectos p ON p.id = e.proyecto_id
-     LEFT JOIN socios    s ON s.id = e.socio_id
+     LEFT JOIN socios    s ON s.id = COALESCE(e.socio_retiro_id, e.socio_id)
      LEFT JOIN egreso_socios esc ON esc.egreso_id = e.id
      LEFT JOIN socios        sc  ON sc.id = esc.socio_id
      WHERE ${condiciones.join(' AND ')}
@@ -100,6 +123,7 @@ router.get('/resumen', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const { rows } = await query(
     `SELECT e.*, d.nombre AS destinatario_nombre, p.nombre AS proyecto_nombre, s.nombre AS socio_nombre,
+            COALESCE(e.socio_retiro_id, e.socio_id) AS socio_id,
             COALESCE(json_agg(json_build_object(
               'socio_id', esc.socio_id, 'socio_nombre', sc.nombre,
               'monto_adeudado', esc.monto_adeudado, 'porcentaje', esc.porcentaje
@@ -107,7 +131,7 @@ router.get('/:id', async (req, res) => {
      FROM egresos e
      JOIN destinatarios d ON d.id = e.destinatario_id
      LEFT JOIN proyectos      p   ON p.id = e.proyecto_id
-     LEFT JOIN socios         s   ON s.id = e.socio_id
+     LEFT JOIN socios         s   ON s.id = COALESCE(e.socio_retiro_id, e.socio_id)
      LEFT JOIN egreso_socios  esc ON esc.egreso_id = e.id
      LEFT JOIN socios         sc  ON sc.id = esc.socio_id
      WHERE e.id = $1
@@ -144,8 +168,8 @@ const fechaEgreso = fecha || new Date().toISOString().split('T')[0];
     const { rows } = await client.query(
       `INSERT INTO egresos
          (destinatario_id, proyecto_id, categoria, monto, moneda,
-          pagado_por_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar, archivo_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          pagado_por_estudio, socio_id, fecha, comprobante, descripcion, cotizacion_dolar, archivo_url, socio_retiro_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
       [
         destinatario_id,
@@ -160,6 +184,7 @@ const fechaEgreso = fecha || new Date().toISOString().split('T')[0];
         descripcion || null,
         cotizacion_dolar,
         archivo_url || null,
+        datosSocio(req.body).retiro,
       ]
     );
     const egreso = rows[0];
@@ -192,7 +217,7 @@ const fechaEgreso = fecha || new Date().toISOString().split('T')[0];
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error creando egreso:', err);
-    res.status(500).json({ error: 'Error al registrar el egreso' });
+    res.status(500).json({ error: mensajeError('Error al registrar el egreso', err) });
   } finally {
     client.release();
   }
@@ -218,14 +243,16 @@ router.put('/:id', async (req, res) => {
 
     const { rows } = await client.query(
       `UPDATE egresos SET destinatario_id=$1, proyecto_id=$2, categoria=$3, monto=$4, moneda=$5,
-         pagado_por_estudio=$6, socio_id=$7, fecha=$8, comprobante=$9, descripcion=$10, archivo_url=$11
-       WHERE id=$12 RETURNING *`,
+         pagado_por_estudio=$6, socio_id=$7, fecha=$8, comprobante=$9, descripcion=$10, archivo_url=$11,
+         socio_retiro_id=$12
+       WHERE id=$13 RETURNING *`,
       [
         destinatario_id, proyecto_id || null, categoria, monto, moneda,
         datosSocio(req.body).pagado,
         datosSocio(req.body).socio,
         fecha, comprobante || null, descripcion || null,
         archivo_url || null,
+        datosSocio(req.body).retiro,
         req.params.id,
       ]
     );
@@ -240,7 +267,7 @@ router.put('/:id', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error actualizando egreso:', err);
-    res.status(500).json({ error: 'Error al actualizar el egreso' });
+    res.status(500).json({ error: mensajeError('Error al actualizar el egreso', err) });
   } finally {
     client.release();
   }

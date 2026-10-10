@@ -108,7 +108,8 @@ router.get('/', async (req, res) => {
     // el que retira queda debiendo el total y cada socio (él incluido) recibe su parte
     // según su porcentaje. Si todos retiran lo mismo, el saldo vuelve a cero.
     const { rows: extracciones } = await query(
-      `SELECT monto, moneda, socio_id FROM egresos WHERE categoria = 'extraccion_socio' AND socio_id IS NOT NULL`
+      `SELECT monto, moneda, socio_retiro_id AS socio_id FROM egresos
+       WHERE categoria = 'extraccion_socio' AND socio_retiro_id IS NOT NULL`
     );
     const totalPorcentaje = socios.reduce((a, s) => a + Number(s.porcentaje_participacion || 0), 0);
     for (const ex of extracciones) {
