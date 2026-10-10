@@ -12,6 +12,7 @@ const CATEGORIAS = [
   { value: 'impuestos',  label: 'Impuestos' },
   { value: 'generales',  label: 'Gastos generales' },
   { value: 'dibujantes', label: 'Dibujantes' },
+  { value: 'extraccion_socio', label: 'Extracción socio' },
 ];
 const TIPOS_DEST = [
   { value: 'servicios',   label: 'Empresa de servicios' },
@@ -24,6 +25,7 @@ const CAT_COLORES = {
   impuestos:  { bg: '#fff8e1', color: '#f57f17' },
   generales:  { bg: '#f3e5f5', color: '#4a148c' },
   dibujantes: { bg: '#e8f5e9', color: '#1b5e20' },
+  extraccion_socio: { bg: '#fce4ec', color: '#880e4f' },
 };
 const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
@@ -114,13 +116,15 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
   const [proveedorDetectado, setProveedorDetectado] = useState(destinatarioSugerido);
   const [errores, setErrores] = useState({});
   const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+  const esExtraccion = form.categoria === 'extraccion_socio';
 
   const validar = () => {
     const errs = {};
     if (!form.destinatario_id) errs.destinatario_id = 'Seleccioná un destinatario';
     if (!form.monto || Number(form.monto) <= 0) errs.monto = 'El monto debe ser mayor a 0';
     if (!form.fecha) errs.fecha = 'La fecha es obligatoria';
-    if (!form.pagado_por_estudio && !form.socio_id) errs.socio_id = 'Seleccioná el socio que pagó';
+    if (esExtraccion && !form.socio_id) errs.socio_id = 'Seleccioná el socio que retira';
+    if (!esExtraccion && !form.pagado_por_estudio && !form.socio_id) errs.socio_id = 'Seleccioná el socio que pagó';
     setErrores(errs);
     return Object.keys(errs).length === 0;
   };
@@ -128,7 +132,9 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validar()) return;
-    onGuardar({ ...form, monto: Number(form.monto), pagado_por_estudio: Boolean(form.pagado_por_estudio), socio_id: form.pagado_por_estudio ? null : form.socio_id });
+    onGuardar(esExtraccion
+      ? { ...form, monto: Number(form.monto), pagado_por_estudio: true, socio_id: form.socio_id }
+      : { ...form, monto: Number(form.monto), pagado_por_estudio: Boolean(form.pagado_por_estudio), socio_id: form.pagado_por_estudio ? null : form.socio_id });
   };
 
   const handleNuevoDestinatario = async (datos) => {
@@ -184,7 +190,10 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
       {mostrarNuevoDest && <NuevoDestinatario inicial={proveedorDetectado || {}} onCrear={handleNuevoDestinatario} onCancelar={() => setMostrarNuevoDest(false)} />}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <Campo label="Categoría">
-          <Select value={form.categoria} onChange={set('categoria')}>
+          <Select value={form.categoria} onChange={e => {
+            const categoria = e.target.value;
+            setForm(p => ({ ...p, categoria, ...(categoria === 'extraccion_socio' ? { pagado_por_estudio: true } : p.pagado_por_estudio ? { socio_id: '' } : {}) }));
+          }}>
             {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </Select>
         </Campo>
@@ -206,6 +215,19 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
           </Select>
         </Campo>
       </div>
+      {esExtraccion ? (
+        <div style={{ border: '1px solid #f8bbd0', background: '#fff7fa', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+          <Campo label="Socio que retira *" error={errores.socio_id}>
+            <Select value={form.socio_id} onChange={set('socio_id')}>
+              <option value="">Seleccioná…</option>
+              {socios.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </Select>
+          </Campo>
+          <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+            Sale de la cuenta del estudio. No cuenta como gasto: en el balance, este socio queda debiendo la parte de los demás.
+          </p>
+        </div>
+      ) : (
       <div style={{ border: '1px solid #d0d0d0', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
         <p style={{ margin: '0 0 12px', fontWeight: 500, fontSize: '14px' }}>¿Quién pagó?</p>
         <div style={{ display: 'flex', gap: '24px', marginBottom: form.pagado_por_estudio ? 0 : '12px' }}>
@@ -227,6 +249,7 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
           </Campo>
         )}
       </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <Campo label="Fecha *" error={errores.fecha}>
           <Input type="date" value={form.fecha} onChange={set('fecha')} />
@@ -329,7 +352,7 @@ export default function Egresos() {
               { campo: 'categoria', tipo: 'texto' },
               { campo: 'proyecto_nombre', tipo: 'texto' },
               { campo: 'monto', tipo: 'monto', valor: (f) => [f.moneda, f.monto] },
-              { campo: 'socio_nombre', tipo: 'texto', valor: (f) => f.pagado_por_estudio ? 'Estudio' : f.socio_nombre },
+              { campo: 'socio_nombre', tipo: 'texto', valor: (f) => f.categoria === 'extraccion_socio' ? `Retiro ${f.socio_nombre || ''}` : f.pagado_por_estudio ? 'Estudio' : f.socio_nombre },
               { campo: 'comprobante', tipo: 'texto' },
               null,
             ]}
@@ -342,7 +365,7 @@ export default function Egresos() {
                 <Celda><BadgeCategoria cat={e.categoria} /></Celda>
                 <Celda style={{ color: '#666', fontSize: '13px' }}>{e.proyecto_nombre || '—'}</Celda>
                 <Celda><span style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(e.monto, e.moneda)}</span></Celda>
-                <Celda style={{ fontSize: '13px', color: '#666' }}>{e.pagado_por_estudio ? '🏢 Estudio' : e.socio_nombre}</Celda>
+                <Celda style={{ fontSize: '13px', color: '#666' }}>{e.categoria === 'extraccion_socio' ? `Retiro: ${e.socio_nombre || '—'}` : e.pagado_por_estudio ? '🏢 Estudio' : e.socio_nombre}</Celda>
                 <Celda style={{ fontSize: '13px', color: '#999', fontFamily: 'monospace' }}>
                   {e.comprobante || '—'}
                   {e.archivo_url && <a href={e.archivo_url} target="_blank" rel="noopener noreferrer" title="Ver comprobante" style={{ marginLeft: '6px', textDecoration: 'none' }}>📎</a>}

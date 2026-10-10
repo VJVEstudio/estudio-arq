@@ -26,14 +26,14 @@ router.get('/proyecto/:id', async (req, res) => {
      WHERE i.proyecto_id = $1 GROUP BY i.id, s.nombre ORDER BY i.fecha ASC`, [id]
   );
 
-  // Egresos directos: excluye categoría 'dibujantes' para evitar doble conteo con horas
+  // Egresos directos: excluye 'dibujantes' (doble conteo con horas) y las extracciones de socios (no son gasto)
   const { rows: egresos } = await query(
     `SELECT e.fecha, e.monto, e.moneda, e.categoria, e.comprobante, e.descripcion,
             e.pagado_por_estudio, e.cotizacion_dolar, d.nombre AS destinatario_nombre, s.nombre AS socio_nombre
      FROM egresos e
      JOIN destinatarios d ON d.id = e.destinatario_id
      LEFT JOIN socios s ON s.id = e.socio_id
-     WHERE e.proyecto_id = $1 AND e.categoria != 'dibujantes' ORDER BY e.fecha ASC`, [id]
+     WHERE e.proyecto_id = $1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ORDER BY e.fecha ASC`, [id]
   );
 
   // Horas con tarifa actual del dibujante (no histórica)
@@ -102,7 +102,7 @@ router.get('/proyecto/:id/csv', async (req, res) => {
     `SELECT e.fecha, 'Egreso' AS tipo, d.nombre AS contraparte,
             e.moneda, e.monto, e.categoria AS subtipo, e.comprobante, e.descripcion
      FROM egresos e JOIN destinatarios d ON d.id=e.destinatario_id
-     WHERE e.proyecto_id=$1 AND e.categoria != 'dibujantes'`, [id]
+     WHERE e.proyecto_id=$1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio')`, [id]
   );
   const { rows: horas } = await query(
     `SELECT h.fecha, 'Horas' AS tipo, d.nombre AS contraparte,
@@ -154,7 +154,7 @@ router.get('/general', async (req, res) => {
 
   const { rows: egresosResumen } = await query(
     `SELECT moneda, categoria, COUNT(*) AS cantidad, SUM(monto) AS total
-     FROM egresos WHERE TRUE AND categoria != 'dibujantes' ${condE}
+     FROM egresos WHERE TRUE AND categoria NOT IN ('dibujantes', 'extraccion_socio') ${condE}
      GROUP BY moneda, categoria ORDER BY moneda, total DESC`
   );
 
@@ -162,8 +162,8 @@ router.get('/general', async (req, res) => {
     `SELECT p.id, p.nombre AS proyecto, c.nombre_razon_social AS cliente, p.estado,
             COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'ARS' ${condI}), 0) AS ingresos_ars,
             COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'USD' ${condI}), 0) AS ingresos_usd,
-            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'ARS' AND e2.categoria != 'dibujantes' ${condE}), 0) AS egresos_ars,
-            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'USD' AND e2.categoria != 'dibujantes' ${condE}), 0) AS egresos_usd,
+            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'ARS' AND e2.categoria NOT IN ('dibujantes', 'extraccion_socio') ${condE}), 0) AS egresos_ars,
+            COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'USD' AND e2.categoria NOT IN ('dibujantes', 'extraccion_socio') ${condE}), 0) AS egresos_usd,
             COALESCE((SELECT SUM(h2.horas * d2.tarifa_hora_base) FROM horas_dibujantes h2 JOIN dibujantes d2 ON d2.id = h2.dibujante_id WHERE h2.proyecto_id = p.id ${condH}), 0) AS costo_horas,
             COALESCE((SELECT SUM(h2.horas) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS horas_totales,
             COALESCE((
@@ -172,7 +172,7 @@ router.get('/general', async (req, res) => {
             ), 0) AS ingresos_usd_convertido,
             COALESCE((
               SELECT SUM(e3.monto * COALESCE(e3.cotizacion_dolar, ${cotizacionActual}))
-              FROM egresos e3 WHERE e3.proyecto_id = p.id AND e3.moneda = 'USD' AND e3.categoria != 'dibujantes' ${condE}
+              FROM egresos e3 WHERE e3.proyecto_id = p.id AND e3.moneda = 'USD' AND e3.categoria NOT IN ('dibujantes', 'extraccion_socio') ${condE}
             ), 0) AS egresos_usd_convertido
      FROM proyectos p
      JOIN clientes c ON c.id = p.cliente_id
@@ -238,7 +238,7 @@ router.get('/general/csv', async (req, res) => {
             e.comprobante, e.descripcion
      FROM egresos e JOIN destinatarios d ON d.id=e.destinatario_id
      LEFT JOIN proyectos p ON p.id=e.proyecto_id
-     WHERE TRUE AND e.categoria != 'dibujantes' ${whereE}`
+     WHERE TRUE AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ${whereE}`
   );
   const filas = [...ingresos, ...egresos].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   const enc = ['Fecha','Tipo','Cliente/Destinatario','Proyecto','Moneda','Monto','Subtipo','Comprobante','Descripción'];
@@ -276,7 +276,7 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
     `SELECT e.fecha, e.monto, e.moneda, e.categoria, e.descripcion, e.comprobante,
             e.cotizacion_dolar, d.nombre AS destinatario_nombre
      FROM egresos e JOIN destinatarios d ON d.id = e.destinatario_id
-     WHERE e.proyecto_id = $1 AND e.categoria != 'dibujantes' ORDER BY e.fecha ASC`, [id]
+     WHERE e.proyecto_id = $1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ORDER BY e.fecha ASC`, [id]
   );
 
   const { rows: horas } = await query(

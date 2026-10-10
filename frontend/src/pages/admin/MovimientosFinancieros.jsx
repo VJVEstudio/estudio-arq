@@ -16,12 +16,14 @@ const CATEGORIAS_EGRESO = [
   { value: 'impuestos',  label: 'Impuestos' },
   { value: 'generales',  label: 'Gastos generales' },
   { value: 'dibujantes', label: 'Dibujantes' },
+  { value: 'extraccion_socio', label: 'Extracción socio' },
 ];
 const CAT_COLORES = {
   servicios:  { bg: '#e3f2fd', color: '#0d47a1' },
   impuestos:  { bg: '#fff8e1', color: '#f57f17' },
   generales:  { bg: '#f3e5f5', color: '#4a148c' },
   dibujantes: { bg: '#e8f5e9', color: '#1b5e20' },
+  extraccion_socio: { bg: '#fce4ec', color: '#880e4f' },
 };
 
 const fmt = (monto, moneda) =>
