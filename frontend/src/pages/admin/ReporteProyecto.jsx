@@ -122,7 +122,7 @@ export default function ReporteProyecto() {
   if (error)    return <div style={{ padding: '32px' }}><AlertaError mensaje={error} /></div>;
   if (!reporte) return null;
 
-  const { proyecto, totales, horas_resumen, timeline } = reporte;
+  const { proyecto, totales, horas_resumen, timeline, resultado_total_convertido: resultadoTotal, cotizacion_oficial: cotizacion } = reporte;
   const estadoColor = { activo: '#1b5e20', pausado: '#e65100', finalizado: '#311b92' };
 
   return (
@@ -161,6 +161,16 @@ export default function ReporteProyecto() {
       <div style={{ display: 'flex', gap: '16px', marginBottom: '28px', flexWrap: 'wrap' }}>
         <BloqueResultado label="ARS" totales={totales.ARS} costoHoras={horas_resumen.costo_total} />
         <BloqueResultado label="USD" totales={totales.USD} costoHoras={0} />
+        <div style={{ background: AZUL, borderRadius: '14px', padding: '18px', flex: '1 1 220px', color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <p style={{ margin: '0 0 8px', fontSize: '13px', color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Resultado total ($)</p>
+          <p style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: Number(resultadoTotal) >= 0 ? '#a5d6a7' : '#ef9a9a' }}>
+            {Number(resultadoTotal) >= 0 ? '+' : ''}{fmt(resultadoTotal, 'ARS')}
+          </p>
+          <p style={{ margin: '10px 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.65)', lineHeight: 1.4 }}>
+            Pesos + dólares convertidos a la cotización del día de cada registro
+            {cotizacion ? ` (sin cotización registrada: dólar oficial de hoy, $ ${Number(cotizacion).toLocaleString('es-AR')})` : ''}.
+          </p>
+        </div>
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '14px', padding: '18px', flex: '0 0 auto', minWidth: '200px' }}>
           <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>RRHH — Dibujantes</p>
           <p style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: 700, color: AZUL }}>{Number(horas_resumen.total_horas).toFixed(1)} h</p>
