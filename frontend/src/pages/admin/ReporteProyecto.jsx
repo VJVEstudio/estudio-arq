@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { get, getAccessToken } from '../../lib/api';
 import { AlertaError, Boton, Select } from '../../components/ui';
@@ -46,10 +46,103 @@ function BloqueResultado({ label, totales, costoHoras }) {
   );
 }
 
+// Junta todas las horas de cada dibujante en una sola fila (período, horas y costo).
+// El costo usa la tarifa actual, igual que la tarjeta "Costo dibujantes", así los
+// totales coinciden. La fila se ubica en la fecha de la última carga de horas.
+const costoHora = (h) => Number(h.costo_actual ?? h.costo_total ?? 0);
+export function agruparHorasPorDibujante(filas) {
+  const grupos = new Map();
+  const resultado = [];
+  for (const f of filas) {
+    if (f.tipo !== 'horas') { resultado.push(f); continue; }
+    let g = grupos.get(f.dibujante_nombre);
+    if (!g) {
+      g = { tipo: 'horas_grupo', dibujante_nombre: f.dibujante_nombre, items: [], horas: 0, costo: 0 };
+      grupos.set(f.dibujante_nombre, g);
+    }
+    g.items.push(f);
+    g.horas += Number(f.horas || 0);
+    g.costo += costoHora(f);
+  }
+  for (const g of grupos.values()) {
+    g.items.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+    g.desde = g.items[0].fecha;
+    g.fecha = g.items[g.items.length - 1].fecha;
+    resultado.push(g);
+  }
+  return resultado.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+}
+
 function TablaMovimientos({ filas, monedaFiltro }) {
-  const filtradas = monedaFiltro ? filas.filter(f => f.moneda === monedaFiltro || f.tipo === 'horas') : filas;
-  const iconoTipo = { ingreso: '↑', egreso: '↓', horas: '⏱' };
-  const colorTipo = { ingreso: '#1b5e20', egreso: '#b71c1c', horas: '#0d47a1' };
+  const [abiertos, setAbiertos] = useState(() => new Set());
+  const filtradas = monedaFiltro ? filas.filter(f => f.moneda === monedaFiltro || f.tipo === 'horas_grupo') : filas;
+  const iconoTipo = { ingreso: '↑', egreso: '↓', horas: '⏱', horas_grupo: '⏱' };
+  const colorTipo = { ingreso: '#1b5e20', egreso: '#b71c1c', horas: '#0d47a1', horas_grupo: '#0d47a1' };
+  const alternar = (nombre) => setAbiertos(a => { const n = new Set(a); if (n.has(nombre)) n.delete(nombre); else n.add(nombre); return n; });
+  const td = { padding: '10px 14px' };
+
+  const filaSimple = (f, key, sub = false) => (
+    <tr key={key} style={{ borderBottom: '1px solid #e0e0e0', background: sub ? '#fafbff' : 'transparent' }}>
+      <td style={{ ...td, whiteSpace: 'nowrap', color: '#666', fontSize: '13px', paddingLeft: sub ? '34px' : '14px' }}>{fmtF(f.fecha)}</td>
+      <td style={td}>
+        {!sub && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            background: f.tipo === 'ingreso' ? '#e8f5e9' : f.tipo === 'egreso' ? '#fce4ec' : '#e3f2fd',
+            color: colorTipo[f.tipo], borderRadius: '20px', padding: '2px 10px', fontSize: '12px', fontWeight: 500,
+          }}>
+            {iconoTipo[f.tipo]} {f.tipo === 'ingreso' ? 'Ingreso' : f.tipo === 'egreso' ? 'Egreso' : 'Horas'}
+          </span>
+        )}
+      </td>
+      <td style={td}>
+        {!sub && (
+          <p style={{ margin: 0, fontWeight: 500 }}>
+            {f.tipo === 'ingreso' && (f.es_del_estudio ? '🏢 Estudio' : f.socio_nombre)}
+            {f.tipo === 'egreso'  && `${f.destinatario_nombre} · ${f.categoria}`}
+          </p>
+        )}
+        {(f.descripcion || f.descripcion_tarea) && (
+          <p style={{ margin: sub ? 0 : '2px 0 0', fontSize: '12px', color: '#666' }}>{f.descripcion_tarea || f.descripcion}</p>
+        )}
+      </td>
+      <td style={{ ...td, fontWeight: sub ? 400 : 600, color: colorTipo[f.tipo], whiteSpace: 'nowrap', fontSize: sub ? '13px' : '14px' }}>
+        {f.tipo === 'ingreso' && `+ ${fmt(f.monto, f.moneda)}`}
+        {f.tipo === 'egreso'  && `− ${fmt(f.monto, f.moneda)}`}
+        {f.tipo === 'horas'   && `− ${fmt(costoHora(f), 'ARS')} (${Number(f.horas).toFixed(1)}h)`}
+      </td>
+      <td style={{ ...td, fontSize: '12px', color: '#999', fontFamily: 'monospace' }}>{f.comprobante || '—'}</td>
+    </tr>
+  );
+
+  const filaGrupo = (g) => {
+    const abierto = abiertos.has(g.dibujante_nombre);
+    const mismoDia = fmtF(g.desde) === fmtF(g.fecha);
+    return (
+      <Fragment key={'g-' + g.dibujante_nombre}>
+        <tr onClick={() => alternar(g.dibujante_nombre)} style={{ borderBottom: '1px solid #e0e0e0', cursor: 'pointer' }} title={abierto ? 'Ocultar el detalle por día' : 'Ver el detalle por día'}>
+          <td style={{ ...td, whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>
+            {mismoDia ? fmtF(g.fecha) : `${fmtF(g.desde)} – ${fmtF(g.fecha)}`}
+          </td>
+          <td style={td}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#e3f2fd', color: colorTipo.horas, borderRadius: '20px', padding: '2px 10px', fontSize: '12px', fontWeight: 500 }}>⏱ Horas</span>
+          </td>
+          <td style={td}>
+            <p style={{ margin: 0, fontWeight: 500 }}>
+              <span style={{ color: AZUL, marginRight: '6px' }}>{abierto ? '▾' : '▸'}</span>{g.dibujante_nombre}
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#666' }}>{g.items.length} carga{g.items.length !== 1 ? 's' : ''} de horas</p>
+          </td>
+          <td style={{ ...td, fontWeight: 600, color: colorTipo.horas, whiteSpace: 'nowrap' }}>
+            − {fmt(g.costo, 'ARS')} ({g.horas.toFixed(1)}h)
+          </td>
+          <td style={{ ...td, fontSize: '12px', color: '#999' }}>—</td>
+        </tr>
+        {abierto && g.items.map((h, j) => filaSimple(h, `g-${g.dibujante_nombre}-${j}`, true))}
+      </Fragment>
+    );
+  };
+
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
@@ -63,36 +156,7 @@ function TablaMovimientos({ filas, monedaFiltro }) {
         <tbody>
           {filtradas.length === 0
             ? <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#999' }}>Sin movimientos</td></tr>
-            : filtradas.map((f, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #e0e0e0' }}>
-                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: '#666', fontSize: '13px' }}>{fmtF(f.fecha)}</td>
-                <td style={{ padding: '10px 14px' }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    background: f.tipo === 'ingreso' ? '#e8f5e9' : f.tipo === 'egreso' ? '#fce4ec' : '#e3f2fd',
-                    color: colorTipo[f.tipo], borderRadius: '20px', padding: '2px 10px', fontSize: '12px', fontWeight: 500,
-                  }}>
-                    {iconoTipo[f.tipo]} {f.tipo === 'ingreso' ? 'Ingreso' : f.tipo === 'egreso' ? 'Egreso' : 'Horas'}
-                  </span>
-                </td>
-                <td style={{ padding: '10px 14px' }}>
-                  <p style={{ margin: 0, fontWeight: 500 }}>
-                    {f.tipo === 'ingreso' && (f.es_del_estudio ? '🏢 Estudio' : f.socio_nombre)}
-                    {f.tipo === 'egreso'  && `${f.destinatario_nombre} · ${f.categoria}`}
-                    {f.tipo === 'horas'   && f.dibujante_nombre}
-                  </p>
-                  {(f.descripcion || f.descripcion_tarea) && (
-                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#666' }}>{f.descripcion_tarea || f.descripcion}</p>
-                  )}
-                </td>
-                <td style={{ padding: '10px 14px', fontWeight: 600, color: colorTipo[f.tipo], whiteSpace: 'nowrap' }}>
-                  {f.tipo === 'ingreso' && `+ ${fmt(f.monto, f.moneda)}`}
-                  {f.tipo === 'egreso'  && `− ${fmt(f.monto, f.moneda)}`}
-                  {f.tipo === 'horas'   && `− ${fmt(f.costo_total, 'ARS')} (${Number(f.horas).toFixed(1)}h)`}
-                </td>
-                <td style={{ padding: '10px 14px', fontSize: '12px', color: '#999', fontFamily: 'monospace' }}>{f.comprobante || '—'}</td>
-              </tr>
-            ))
+            : filtradas.map((f, i) => (f.tipo === 'horas_grupo' ? filaGrupo(f) : filaSimple(f, i)))
           }
         </tbody>
       </table>
@@ -124,6 +188,7 @@ export default function ReporteProyecto() {
 
   const { proyecto, totales, horas_resumen, timeline, resultado_total_convertido: resultadoTotal, cotizacion_oficial: cotizacion } = reporte;
   const estadoColor = { activo: '#1b5e20', pausado: '#e65100', finalizado: '#311b92' };
+  const lineaDeTiempo = agruparHorasPorDibujante(timeline);
 
   return (
     <div style={{ padding: '32px', maxWidth: '1100px' }}>
@@ -186,14 +251,17 @@ export default function ReporteProyecto() {
 
       <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #e0e0e0' }}>
-          <p style={{ margin: 0, fontWeight: 500 }}>Línea de tiempo ({timeline.length} movimientos)</p>
+          <p style={{ margin: 0, fontWeight: 500 }}>
+            Línea de tiempo ({lineaDeTiempo.length} renglones)
+            <span style={{ fontWeight: 400, fontSize: '12px', color: '#999', marginLeft: '8px' }}>Horas agrupadas por dibujante · tocá un dibujante para ver el detalle por día</span>
+          </p>
           <Select value={monedaFiltro} onChange={e => setMonedaFiltro(e.target.value)} style={{ width: 'auto' }}>
             <option value="">Todas las monedas</option>
             <option value="ARS">$ ARS</option>
             <option value="USD">U$S USD</option>
           </Select>
         </div>
-        <TablaMovimientos filas={timeline} monedaFiltro={monedaFiltro} />
+        <TablaMovimientos filas={lineaDeTiempo} monedaFiltro={monedaFiltro} />
       </div>
     </div>
   );
