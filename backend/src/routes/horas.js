@@ -2,6 +2,7 @@ const express = require('express');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 
+const { costoSQL, joinLiqSQL } = require('../utils/costoHoras');
 const router = express.Router();
 router.use(auth.verificar);
 
@@ -52,11 +53,12 @@ router.get('/resumen', auth.soloAdmin, async (req, res) => {
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
             COUNT(h.id) AS registros,
             SUM(h.horas) AS horas_totales,
-            SUM(h.horas * d.tarifa_hora_base) AS costo_total,
+            SUM(${costoSQL()}) AS costo_total,
             MAX(CASE WHEN d.monotributo_activo THEN d.monotributo_monto ELSE 0 END) AS monotributo
      FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
+     ${joinLiqSQL()}
      WHERE ${condiciones.join(' AND ')}
      GROUP BY d.id, d.nombre, d.tarifa_hora_base, p.id, p.nombre
      ORDER BY d.nombre, p.nombre`,
@@ -191,11 +193,12 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   const { rows } = await query(
     `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
-            SUM(h.horas) AS horas_totales, SUM(h.horas * d.tarifa_hora_base) AS costo_total,
+            SUM(h.horas) AS horas_totales, SUM(${costoSQL()}) AS costo_total,
             MAX(CASE WHEN d.monotributo_activo THEN d.monotributo_monto ELSE 0 END) AS monotributo
      FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
+     ${joinLiqSQL()}
      WHERE ${condiciones.join(' AND ')}
      GROUP BY d.id, d.nombre, d.tarifa_hora_base, p.id, p.nombre
      ORDER BY d.nombre, p.nombre`,
