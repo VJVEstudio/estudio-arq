@@ -2,6 +2,7 @@ const express = require('express');
 const { query } = require('../db');
 const auth = require('../middleware/auth');
 const { obtenerCotizacionOficial } = require('../utils/cotizacion');
+const { tarifaSQL, costoSQL, joinLiqSQL, liquidadaSQL } = require('../utils/costoHoras');
 
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
@@ -36,12 +37,12 @@ router.get('/proyecto/:id', async (req, res) => {
      WHERE e.proyecto_id = $1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ORDER BY e.fecha ASC`, [id]
   );
 
-  // Horas con tarifa actual del dibujante (no histórica)
+  // Horas: liquidadas a la tarifa de su liquidación; sin liquidar, a la tarifa actual
   const { rows: horas } = await query(
-    `SELECT h.fecha, h.horas, h.tarifa_aplicada, h.costo_total, h.descripcion_tarea,
+    `SELECT h.fecha, h.horas, h.descripcion_tarea,
             d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
-            (h.horas * d.tarifa_hora_base) AS costo_actual
-     FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id
+            ${tarifaSQL()} AS tarifa_valuada, ${costoSQL()} AS costo_valuado, ${liquidadaSQL()} AS liquidada
+     FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id ${joinLiqSQL()}
      WHERE h.proyecto_id = $1 ORDER BY h.fecha ASC`, [id]
   );
 
@@ -49,15 +50,16 @@ router.get('/proyecto/:id', async (req, res) => {
   ingresos.forEach(i => { totales[i.moneda].ingresos += Number(i.monto); });
   egresos.forEach(e => { totales[e.moneda].egresos += Number(e.monto); });
 
-  // Costo de horas usando tarifa actual
-  const costoHoras = horas.reduce((s, h) => s + Number(h.costo_actual), 0);
+  const costoHoras = horas.reduce((s, h) => s + Number(h.costo_valuado), 0);
+  const costoPendiente = horas.filter(h => !h.liquidada).reduce((s, h) => s + Number(h.costo_valuado), 0);
+  const horasPendientes = horas.filter(h => !h.liquidada).reduce((s, h) => s + Number(h.horas), 0);
   const horasTotales = horas.reduce((s, h) => s + Number(h.horas), 0);
 
   const porDibujante = {};
   horas.forEach(h => {
     if (!porDibujante[h.dibujante_nombre]) porDibujante[h.dibujante_nombre] = { horas: 0, costo: 0 };
     porDibujante[h.dibujante_nombre].horas += Number(h.horas);
-    porDibujante[h.dibujante_nombre].costo += Number(h.costo_actual);
+    porDibujante[h.dibujante_nombre].costo += Number(h.costo_valuado);
   });
 
   const timeline = [
@@ -83,7 +85,8 @@ router.get('/proyecto/:id', async (req, res) => {
     },
     resultado_total_convertido: resultadoTotalConvertido,
     cotizacion_oficial: cotizacionActual,
-    horas_resumen: { total_horas: horasTotales, costo_total: costoHoras, por_dibujante: porDibujante },
+    horas_resumen: { total_horas: horasTotales, costo_total: costoHoras, por_dibujante: porDibujante,
+                     horas_pendientes: horasPendientes, costo_pendiente: costoPendiente },
     timeline,
   });
 });
@@ -107,9 +110,10 @@ router.get('/proyecto/:id/csv', async (req, res) => {
   );
   const { rows: horas } = await query(
     `SELECT h.fecha, 'Horas' AS tipo, d.nombre AS contraparte,
-            'ARS' AS moneda, (h.horas * d.tarifa_hora_base) AS monto,
-            CONCAT(h.horas, ' hs') AS subtipo, '' AS comprobante, h.descripcion_tarea AS descripcion
-     FROM horas_dibujantes h JOIN dibujantes d ON d.id=h.dibujante_id WHERE h.proyecto_id=$1`, [id]
+            'ARS' AS moneda, ${costoSQL()} AS monto,
+            CONCAT(h.horas, ' hs', CASE WHEN ${liquidadaSQL()} THEN '' ELSE ' (sin liquidar, tarifa actual)' END) AS subtipo,
+            '' AS comprobante, h.descripcion_tarea AS descripcion
+     FROM horas_dibujantes h JOIN dibujantes d ON d.id=h.dibujante_id ${joinLiqSQL()} WHERE h.proyecto_id=$1`, [id]
   );
   const filas = [...ingresos, ...egresos, ...horas].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   const enc = ['Fecha', 'Tipo', 'Contraparte', 'Moneda', 'Monto', 'Subtipo', 'Comprobante', 'Descripción'];
@@ -165,7 +169,7 @@ router.get('/general', async (req, res) => {
             COALESCE((SELECT SUM(i2.monto) FROM ingresos i2 WHERE i2.proyecto_id = p.id AND i2.moneda = 'USD' ${condI}), 0) AS ingresos_usd,
             COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'ARS' AND e2.categoria NOT IN ('dibujantes', 'extraccion_socio') ${condE}), 0) AS egresos_ars,
             COALESCE((SELECT SUM(e2.monto) FROM egresos e2 WHERE e2.proyecto_id = p.id AND e2.moneda = 'USD' AND e2.categoria NOT IN ('dibujantes', 'extraccion_socio') ${condE}), 0) AS egresos_usd,
-            COALESCE((SELECT SUM(h2.horas * d2.tarifa_hora_base) FROM horas_dibujantes h2 JOIN dibujantes d2 ON d2.id = h2.dibujante_id WHERE h2.proyecto_id = p.id ${condH}), 0) AS costo_horas,
+            COALESCE((SELECT SUM(${costoSQL('h2', 'd2', 'l2')}) FROM horas_dibujantes h2 JOIN dibujantes d2 ON d2.id = h2.dibujante_id ${joinLiqSQL('h2', 'l2')} WHERE h2.proyecto_id = p.id ${condH}), 0) AS costo_horas,
             COALESCE((SELECT SUM(h2.horas) FROM horas_dibujantes h2 WHERE h2.proyecto_id = p.id ${condH}), 0) AS horas_totales,
             COALESCE((
               SELECT SUM(i3.monto * COALESCE(i3.cotizacion_dolar, ${cotizacionActual}))
@@ -194,11 +198,11 @@ router.get('/general', async (req, res) => {
   const { rows: porDibujante } = await query(
     `SELECT d.nombre AS dibujante,
             SUM(h.horas) AS horas_totales,
-            SUM(h.horas * d.tarifa_hora_base) AS costo_total,
-            SUM(CASE WHEN h.liquidada THEN h.horas * d.tarifa_hora_base ELSE 0 END) AS costo_liquidado,
-            SUM(CASE WHEN NOT h.liquidada THEN h.horas * d.tarifa_hora_base ELSE 0 END) AS costo_pendiente,
+            SUM(${costoSQL()}) AS costo_total,
+            SUM(CASE WHEN ${liquidadaSQL()} THEN ${costoSQL()} ELSE 0 END) AS costo_liquidado,
+            SUM(CASE WHEN NOT ${liquidadaSQL()} THEN ${costoSQL()} ELSE 0 END) AS costo_pendiente,
             COUNT(DISTINCT h.proyecto_id) AS proyectos
-     FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id
+     FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id ${joinLiqSQL()}
      WHERE TRUE ${condH}
      GROUP BY d.id, d.nombre ORDER BY horas_totales DESC`
   );
@@ -282,8 +286,8 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
 
   const { rows: horas } = await query(
     `SELECT h.fecha, h.horas, h.descripcion_tarea, d.nombre AS dibujante_nombre,
-            d.tarifa_hora_base, (h.horas * d.tarifa_hora_base) AS costo_actual
-     FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id
+            ${tarifaSQL()} AS tarifa_hora_base, ${costoSQL()} AS costo_actual, ${liquidadaSQL()} AS liquidada
+     FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id ${joinLiqSQL()}
      WHERE h.proyecto_id = $1 ORDER BY h.fecha ASC`, [id]
   );
 
@@ -414,9 +418,13 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
     { label: 'Fecha', w: 70, valor: f => fmtF(f.fecha) },
     { label: 'Dibujante', w: 120, key: 'dibujante_nombre' },
     { label: 'Horas', w: 50, align: 'right', valor: f => Number(f.horas).toFixed(1) },
-    { label: 'Tarifa', w: 100, align: 'right', valor: f => fmtM(f.tarifa_hora_base) },
+    { label: 'Tarifa', w: 100, align: 'right', valor: f => fmtM(f.tarifa_hora_base) + (f.liquidada ? '' : ' *') },
     { label: 'Costo', w: ancho - 340, align: 'right', valor: f => fmtM(f.costo_actual) },
   ]);
+  if (horas.some(h => !h.liquidada)) {
+    doc.moveDown(0.3).fillColor('#999').fontSize(8).font('Helvetica')
+      .text('* Horas sin liquidar: valuadas a la tarifa actual del dibujante (estimado). Las liquidadas, a la tarifa de su liquidación.', margen, doc.y, { width: ancho });
+  }
 
   doc.end();
 });

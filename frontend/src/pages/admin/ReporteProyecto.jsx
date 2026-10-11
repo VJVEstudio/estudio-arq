@@ -47,9 +47,10 @@ function BloqueResultado({ label, totales, costoHoras }) {
 }
 
 // Junta todas las horas de cada dibujante en una sola fila (período, horas y costo).
-// El costo usa la tarifa actual, igual que la tarjeta "Costo dibujantes", así los
-// totales coinciden. La fila se ubica en la fecha de la última carga de horas.
-const costoHora = (h) => Number(h.costo_actual ?? h.costo_total ?? 0);
+// Costo de cada hora: liquidada → tarifa de su liquidación; sin liquidar → tarifa
+// actual (estimado). Mismo criterio que la tarjeta "Costo dibujantes".
+// La fila se ubica en la fecha de la última carga de horas.
+const costoHora = (h) => Number(h.costo_valuado ?? h.costo_actual ?? h.costo_total ?? 0);
 export function agruparHorasPorDibujante(filas) {
   const grupos = new Map();
   const resultado = [];
@@ -57,12 +58,13 @@ export function agruparHorasPorDibujante(filas) {
     if (f.tipo !== 'horas') { resultado.push(f); continue; }
     let g = grupos.get(f.dibujante_nombre);
     if (!g) {
-      g = { tipo: 'horas_grupo', dibujante_nombre: f.dibujante_nombre, items: [], horas: 0, costo: 0 };
+      g = { tipo: 'horas_grupo', dibujante_nombre: f.dibujante_nombre, items: [], horas: 0, costo: 0, horasPendientes: 0 };
       grupos.set(f.dibujante_nombre, g);
     }
     g.items.push(f);
     g.horas += Number(f.horas || 0);
     g.costo += costoHora(f);
+    if (f.liquidada === false) g.horasPendientes += Number(f.horas || 0);
   }
   for (const g of grupos.values()) {
     g.items.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
@@ -110,6 +112,11 @@ function TablaMovimientos({ filas, monedaFiltro }) {
         {f.tipo === 'ingreso' && `+ ${fmt(f.monto, f.moneda)}`}
         {f.tipo === 'egreso'  && `− ${fmt(f.monto, f.moneda)}`}
         {f.tipo === 'horas'   && `− ${fmt(costoHora(f), 'ARS')} (${Number(f.horas).toFixed(1)}h)`}
+        {f.tipo === 'horas' && f.tarifa_valuada != null && (
+          <span style={{ display: 'block', fontSize: '11px', fontWeight: 400, color: f.liquidada === false ? '#b26a00' : '#888' }}>
+            {f.liquidada === false ? 'sin liquidar · tarifa actual ' : 'liquidada a '}{fmt(f.tarifa_valuada, 'ARS')}/h
+          </span>
+        )}
       </td>
       <td style={{ ...td, fontSize: '12px', color: '#999', fontFamily: 'monospace' }}>{f.comprobante || '—'}</td>
     </tr>
@@ -131,7 +138,10 @@ function TablaMovimientos({ filas, monedaFiltro }) {
             <p style={{ margin: 0, fontWeight: 500 }}>
               <span style={{ color: AZUL, marginRight: '6px' }}>{abierto ? '▾' : '▸'}</span>{g.dibujante_nombre}
             </p>
-            <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#666' }}>{g.items.length} carga{g.items.length !== 1 ? 's' : ''} de horas</p>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#666' }}>
+              {g.items.length} carga{g.items.length !== 1 ? 's' : ''} de horas
+              {g.horasPendientes > 0 && <span style={{ color: '#b26a00' }}> · {g.horasPendientes.toFixed(1)} h sin liquidar (tarifa actual)</span>}
+            </p>
           </td>
           <td style={{ ...td, fontWeight: 600, color: colorTipo.horas, whiteSpace: 'nowrap' }}>
             − {fmt(g.costo, 'ARS')} ({g.horas.toFixed(1)}h)
@@ -239,7 +249,11 @@ export default function ReporteProyecto() {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '14px', padding: '18px', flex: '0 0 auto', minWidth: '200px' }}>
           <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>RRHH — Dibujantes</p>
           <p style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: 700, color: AZUL }}>{Number(horas_resumen.total_horas).toFixed(1)} h</p>
-          <p style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: 600, color: '#e65100' }}>{fmt(horas_resumen.costo_total, 'ARS')}</p>
+          <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 600, color: '#e65100' }}>{fmt(horas_resumen.costo_total, 'ARS')}</p>
+          <p style={{ margin: '0 0 12px', fontSize: '11px', color: '#888', lineHeight: 1.4 }}>
+            A la tarifa de cada liquidación
+            {Number(horas_resumen.horas_pendientes) > 0 && <><br /><span style={{ color: '#b26a00' }}>Incluye {Number(horas_resumen.horas_pendientes).toFixed(1)} h sin liquidar a tarifa actual ({fmt(horas_resumen.costo_pendiente, 'ARS')})</span></>}
+          </p>
           {Object.entries(horas_resumen.por_dibujante).map(([nombre, d]) => (
             <div key={nombre} style={{ fontSize: '13px', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
               <span style={{ color: '#666' }}>{nombre}</span>

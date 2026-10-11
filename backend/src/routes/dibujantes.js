@@ -3,6 +3,7 @@ const bcrypt  = require('bcryptjs');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 
+const { costoSQL, joinLiqSQL } = require('../utils/costoHoras');
 const router = express.Router();
 router.use(auth.verificar);
 
@@ -12,11 +13,12 @@ router.get('/', async (req, res) => {
     const { rows } = await query(
       `SELECT d.*, u.email, u.activo AS usuario_activo,
               COALESCE(SUM(h.horas), 0)       AS horas_totales,
-              COALESCE(SUM(h.costo_total), 0) AS costo_total_historico,
+              COALESCE(SUM(${costoSQL()}), 0) AS costo_total_historico,
               COUNT(DISTINCT h.proyecto_id)   AS proyectos_trabajados
        FROM dibujantes d
        JOIN usuarios u ON u.id = d.usuario_id
        LEFT JOIN horas_dibujantes h ON h.dibujante_id = d.id
+       ${joinLiqSQL()}
        GROUP BY d.id, u.email, u.activo
        ORDER BY d.nombre ASC`
     );
