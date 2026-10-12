@@ -2,7 +2,7 @@ const express = require('express');
 const { query } = require('../db');
 const auth = require('../middleware/auth');
 const { obtenerCotizacionOficial } = require('../utils/cotizacion');
-const { tarifaSQL, costoSQL, joinLiqSQL, liquidadaSQL } = require('../utils/costoHoras');
+const { tarifaSQL, costoSQL, monotributoSQL, joinLiqSQL, liquidadaSQL } = require('../utils/costoHoras');
 
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
@@ -41,7 +41,8 @@ router.get('/proyecto/:id', async (req, res) => {
   const { rows: horas } = await query(
     `SELECT h.fecha, h.horas, h.descripcion_tarea,
             d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
-            ${tarifaSQL()} AS tarifa_valuada, ${costoSQL()} AS costo_valuado, ${liquidadaSQL()} AS liquidada
+            ${tarifaSQL()} AS tarifa_valuada, ${monotributoSQL()} AS monotributo_valuado,
+            ${costoSQL()} AS costo_valuado, ${liquidadaSQL()} AS liquidada
      FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id ${joinLiqSQL()}
      WHERE h.proyecto_id = $1 ORDER BY h.fecha ASC`, [id]
   );
@@ -53,6 +54,7 @@ router.get('/proyecto/:id', async (req, res) => {
   const costoHoras = horas.reduce((s, h) => s + Number(h.costo_valuado), 0);
   const costoPendiente = horas.filter(h => !h.liquidada).reduce((s, h) => s + Number(h.costo_valuado), 0);
   const horasPendientes = horas.filter(h => !h.liquidada).reduce((s, h) => s + Number(h.horas), 0);
+  const monotributoHoras = horas.reduce((s, h) => s + Number(h.monotributo_valuado), 0);
   const horasTotales = horas.reduce((s, h) => s + Number(h.horas), 0);
 
   const porDibujante = {};
@@ -86,7 +88,7 @@ router.get('/proyecto/:id', async (req, res) => {
     resultado_total_convertido: resultadoTotalConvertido,
     cotizacion_oficial: cotizacionActual,
     horas_resumen: { total_horas: horasTotales, costo_total: costoHoras, por_dibujante: porDibujante,
-                     horas_pendientes: horasPendientes, costo_pendiente: costoPendiente },
+                     horas_pendientes: horasPendientes, costo_pendiente: costoPendiente, monotributo: monotributoHoras },
     timeline,
   });
 });
@@ -421,9 +423,11 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
     { label: 'Tarifa', w: 100, align: 'right', valor: f => fmtM(f.tarifa_hora_base) + (f.liquidada ? '' : ' *') },
     { label: 'Costo', w: ancho - 340, align: 'right', valor: f => fmtM(f.costo_actual) },
   ]);
+  doc.moveDown(0.3).fillColor('#999').fontSize(8).font('Helvetica')
+    .text('Costo = horas × tarifa de la liquidación + parte proporcional del monotributo de esa liquidación.', margen, doc.y, { width: ancho });
   if (horas.some(h => !h.liquidada)) {
     doc.moveDown(0.3).fillColor('#999').fontSize(8).font('Helvetica')
-      .text('* Horas sin liquidar: valuadas a la tarifa actual del dibujante (estimado). Las liquidadas, a la tarifa de su liquidación.', margen, doc.y, { width: ancho });
+      .text('* Horas sin liquidar: valuadas a la tarifa actual del dibujante (estimado, sin monotributo). Las liquidadas, a la tarifa de su liquidación más su parte del monotributo.', margen, doc.y, { width: ancho });
   }
 
   doc.end();

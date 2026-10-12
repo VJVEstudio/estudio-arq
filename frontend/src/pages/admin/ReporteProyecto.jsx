@@ -115,6 +115,7 @@ function TablaMovimientos({ filas, monedaFiltro }) {
         {f.tipo === 'horas' && f.tarifa_valuada != null && (
           <span style={{ display: 'block', fontSize: '11px', fontWeight: 400, color: f.liquidada === false ? '#b26a00' : '#888' }}>
             {f.liquidada === false ? 'sin liquidar · tarifa actual ' : 'liquidada a '}{fmt(f.tarifa_valuada, 'ARS')}/h
+            {Number(f.monotributo_valuado) > 0 && ` + mono ${fmt(f.monotributo_valuado, 'ARS')}`}
           </span>
         )}
       </td>
@@ -252,6 +253,7 @@ export default function ReporteProyecto() {
           <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 600, color: '#e65100' }}>{fmt(horas_resumen.costo_total, 'ARS')}</p>
           <p style={{ margin: '0 0 12px', fontSize: '11px', color: '#888', lineHeight: 1.4 }}>
             A la tarifa de cada liquidación
+            {Number(horas_resumen.monotributo) > 0 && <>, con monotributo ({fmt(horas_resumen.monotributo, 'ARS')})</>}
             {Number(horas_resumen.horas_pendientes) > 0 && <><br /><span style={{ color: '#b26a00' }}>Incluye {Number(horas_resumen.horas_pendientes).toFixed(1)} h sin liquidar a tarifa actual ({fmt(horas_resumen.costo_pendiente, 'ARS')})</span></>}
           </p>
           {Object.entries(horas_resumen.por_dibujante).map(([nombre, d]) => (
