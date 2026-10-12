@@ -13,8 +13,6 @@ const NAV = [
   ]},
 { grupo: 'Finanzas', items: [
     { to: '/admin/movimientos', label: 'Movimientos', icono: '↕' },
-    { to: '/admin/ingresos', label: 'Ingresos', icono: '↑' },
-    { to: '/admin/egresos',  label: 'Egresos',  icono: '↓' },
     { to: '/admin/balance',  label: 'Balance',  icono: '⇄' },
     { to: '/admin/banco',    label: 'Banco',    icono: '🏦' },
       ]},
