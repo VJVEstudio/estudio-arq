@@ -8,8 +8,6 @@ import Login from './pages/Login';
 
 import Dashboard       from './pages/admin/Dashboard';
 import ClientesProyectos from './pages/admin/ClientesProyectos';
-import Ingresos        from './pages/admin/Ingresos';
-import Egresos         from './pages/admin/Egresos';
 import MovimientosFinancieros from './pages/admin/MovimientosFinancieros';
 import Banco from './pages/admin/Banco';
 import Rendiciones from './pages/admin/Rendiciones';
@@ -33,8 +31,9 @@ export default function App() {
             <Route element={<LayoutAdmin />}>
               <Route path="/admin"                       element={<Dashboard />} />
               <Route path="/admin/clientes-proyectos"      element={<ClientesProyectos />} />
-              <Route path="/admin/ingresos"                element={<Ingresos />} />
-              <Route path="/admin/egresos"                 element={<Egresos />} />
+              {/* Ingresos y Egresos ahora se ven dentro de Movimientos */}
+              <Route path="/admin/ingresos"                element={<Navigate to="/admin/movimientos?vista=ingresos" replace />} />
+              <Route path="/admin/egresos"                 element={<Navigate to="/admin/movimientos?vista=egresos" replace />} />
 <Route path="/admin/movimientos"             element={<MovimientosFinancieros />} />
               <Route path="/admin/banco"                   element={<Banco />} />
               <Route path="/admin/rendiciones"             element={<Rendiciones />} />

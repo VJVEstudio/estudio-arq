@@ -1,5 +1,7 @@
 import { useState, useEffect, Fragment } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { agruparLiquidaciones } from '../../lib/agruparLiquidaciones';
+import SelectorProyectos, { SIN_PROYECTO } from '../../components/SelectorProyectos';
 import { useIngresos } from '../../hooks/useIngresos';
 import { useEgresos, useDestinatarios } from '../../hooks/useEgresos';
 import { FormIngreso } from './Ingresos';
@@ -45,7 +47,7 @@ function BadgeCategoria({ cat }) {
   return <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, background: c.bg, color: c.color }}>{label}</span>;
 }
 
-function TarjetasResumen({ vista, ingresos, egresos }) {
+function TarjetasResumen({ vista, ingresos, egresos, filtrado }) {
   const totIng = { ARS: 0, USD: 0 };
   const totEgr = { ARS: 0, USD: 0 };
   ingresos.forEach(i => { totIng[i.moneda] = (totIng[i.moneda] || 0) + Number(i.monto); });
@@ -66,7 +68,9 @@ function TarjetasResumen({ vista, ingresos, egresos }) {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+    <div style={{ marginBottom: '28px' }}>
+    {filtrado && <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#b26a00' }}>Totales de lo filtrado</p>}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
       {tarjetas.map(t => (
         <div key={t.label} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 20px' }}>
           <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</p>
@@ -74,14 +78,29 @@ function TarjetasResumen({ vista, ingresos, egresos }) {
         </div>
       ))}
     </div>
+    </div>
   );
 }
 
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const FILTROS_VACIOS = { moneda: '', desde: '', hasta: '', categoria: '', tipo: '' };
+
 export default function MovimientosFinancieros() {
-  const [vista, setVista] = useState('todos'); // 'todos' | 'ingresos' | 'egresos'
-  const [filtros, setFiltros] = useState({ moneda: '', desde: '', hasta: '' });
+  // La vista puede venir en la dirección (?vista=ingresos), por ejemplo desde el Dashboard
+  const [searchParams] = useSearchParams();
+  const vistaInicial = ['ingresos', 'egresos'].includes(searchParams.get('vista')) ? searchParams.get('vista') : 'todos';
+  const [vista, setVista] = useState(vistaInicial); // 'todos' | 'ingresos' | 'egresos'
+  const [filtros, setFiltros] = useState(FILTROS_VACIOS);
+  const [proyectosSel, setProyectosSel] = useState(() => new Set());
+  const [modoFecha, setModoFecha] = useState('rango'); // 'rango' | 'mes'
+  const hoy = new Date();
+  const [mes, setMes] = useState(`${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`);
   const [buscar, setBuscar] = useState('');
-  const [modal, setModal] = useState(null); // 'crear-ingreso' | 'crear-egreso' | objeto a editar/eliminar
+  // ?nuevo=ingreso|egreso abre directamente el formulario (accesos rápidos del Dashboard)
+  const [modal, setModal] = useState(() => {
+    const n = searchParams.get('nuevo');
+    return n === 'ingreso' ? 'crear-ingreso' : n === 'egreso' ? 'crear-egreso' : null;
+  }); // 'crear-ingreso' | 'crear-egreso' | objeto a editar/eliminar
   const [abiertos, setAbiertos] = useState(() => new Set());
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
@@ -96,8 +115,16 @@ export default function MovimientosFinancieros() {
       .catch(() => {});
   }, []);
 
-  const filtrosIngresos = { moneda: filtros.moneda, desde: filtros.desde, hasta: filtros.hasta };
-  const filtrosEgresos  = { moneda: filtros.moneda, desde: filtros.desde, hasta: filtros.hasta };
+  // Período efectivo: rango de fechas o un mes completo
+  const periodo = (() => {
+    if (modoFecha === 'mes' && mes) {
+      const [a, m] = mes.split('-').map(Number);
+      return { desde: `${mes}-01`, hasta: `${mes}-${String(new Date(a, m, 0).getDate()).padStart(2, '0')}` };
+    }
+    return { desde: filtros.desde, hasta: filtros.hasta };
+  })();
+  const filtrosIngresos = { moneda: filtros.moneda, desde: periodo.desde, hasta: periodo.hasta, tipo: filtros.tipo };
+  const filtrosEgresos  = { moneda: filtros.moneda, desde: periodo.desde, hasta: periodo.hasta, categoria: filtros.categoria };
 
   const { ingresos, cargando: cargandoIng, error: errorIng, crear: crearIngreso, actualizar: actualizarIngreso, eliminar: eliminarIngreso } = useIngresos(filtrosIngresos);
   const { egresos, cargando: cargandoEgr, error: errorEgr, crear: crearEgreso, actualizar: actualizarEgreso, eliminar: eliminarEgreso } = useEgresos(filtrosEgresos);
@@ -106,11 +133,16 @@ export default function MovimientosFinancieros() {
   const cargando = cargandoIng || cargandoEgr;
   const error = errorIng || errorEgr;
 
+  // Filtros que se aplican en pantalla: proyectos elegidos y búsqueda
+  const enProyectos = (m) => proyectosSel.size === 0 || proyectosSel.has(m.proyecto_id || SIN_PROYECTO);
+  const ingresosFiltrados = ingresos.filter(enProyectos);
+  const egresosFiltrados = egresos.filter(enProyectos);
+
   // Combinar y filtrar según la vista elegida
   const movimientos = (() => {
     let combinados = [];
-    if (vista !== 'egresos') combinados = combinados.concat(ingresos.map(i => ({ ...i, _tipo: 'ingreso' })));
-    if (vista !== 'ingresos') combinados = combinados.concat(egresos.map(e => ({ ...e, _tipo: 'egreso' })));
+    if (vista !== 'egresos') combinados = combinados.concat(ingresosFiltrados.map(i => ({ ...i, _tipo: 'ingreso' })));
+    if (vista !== 'ingresos') combinados = combinados.concat(egresosFiltrados.map(e => ({ ...e, _tipo: 'egreso' })));
     combinados.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     if (buscar) {
       const b = buscar.toLowerCase();
@@ -165,7 +197,7 @@ export default function MovimientosFinancieros() {
     <div style={{ padding: '32px', maxWidth: '1200px' }}>
       <EncabezadoSeccion
         titulo="Movimientos financieros"
-        subtitulo={`${movimientos.length} registro${movimientos.length !== 1 ? 's' : ''}`}
+        subtitulo={`${movimientos.length} registro${movimientos.length !== 1 ? 's' : ''}${modoFecha === 'mes' && mes ? ` · ${MESES[Number(mes.split('-')[1]) - 1]} ${mes.split('-')[0]}` : ''}`}
         accion={
           <div style={{ display: 'flex', gap: '8px' }}>
             <Boton variante="secundario" onClick={() => setModal('crear-ingreso')}>+ Ingreso</Boton>
@@ -177,7 +209,7 @@ export default function MovimientosFinancieros() {
       {/* Selector de vista */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f0f0f0', borderRadius: '10px', padding: '4px', width: 'fit-content' }}>
         {[{ id: 'todos', label: 'Todos' }, { id: 'ingresos', label: '↑ Ingresos' }, { id: 'egresos', label: '↓ Egresos' }].map(opt => (
-          <button key={opt.id} onClick={() => setVista(opt.id)} style={{
+          <button key={opt.id} onClick={() => { setVista(opt.id); setFiltros(f => ({ ...f, categoria: '', tipo: '' })); }} style={{
             padding: '8px 18px', fontSize: '13px', borderRadius: '8px', border: 'none',
             background: vista === opt.id ? '#fff' : 'transparent',
             boxShadow: vista === opt.id ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
@@ -190,7 +222,11 @@ export default function MovimientosFinancieros() {
         ))}
       </div>
 
-      <TarjetasResumen vista={vista} ingresos={ingresos} egresos={egresos} />
+      <TarjetasResumen
+        vista={vista}
+        ingresos={movimientos.filter(m => m._tipo === 'ingreso')}
+        egresos={movimientos.filter(m => m._tipo === 'egreso')}
+        filtrado={proyectosSel.size > 0 || Boolean(buscar)} />
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         <Buscador value={buscar} onChange={setBuscar} placeholder="Buscar por cliente, destinatario, proyecto…" />
@@ -199,10 +235,41 @@ export default function MovimientosFinancieros() {
           <option value="ARS">$ ARS</option>
           <option value="USD">U$S USD</option>
         </Select>
-        <Input type="date" value={filtros.desde} onChange={setFiltro('desde')} style={{ width: 'auto' }} title="Desde" />
-        <Input type="date" value={filtros.hasta} onChange={setFiltro('hasta')} style={{ width: 'auto' }} title="Hasta" />
-        {Object.values(filtros).some(Boolean) && (
-          <Boton variante="texto" onClick={() => setFiltros({ moneda: '', desde: '', hasta: '' })}>Limpiar filtros</Boton>
+        <SelectorProyectos proyectos={proyectos} seleccion={proyectosSel} onCambiar={setProyectosSel} />
+        {vista === 'egresos' && (
+          <Select value={filtros.categoria} onChange={setFiltro('categoria')} style={{ width: 'auto' }}>
+            <option value="">Todas las categorías</option>
+            {CATEGORIAS_EGRESO.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </Select>
+        )}
+        {vista === 'ingresos' && (
+          <Select value={filtros.tipo} onChange={setFiltro('tipo')} style={{ width: 'auto' }}>
+            <option value="">Facturado y no facturado</option>
+            <option value="facturado">Facturado</option>
+            <option value="no_facturado">No facturado</option>
+          </Select>
+        )}
+        <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
+          {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
+            <button key={opt.id} onClick={() => setModoFecha(opt.id)} style={{
+              padding: '5px 10px', fontSize: '12px', borderRadius: '6px', border: 'none',
+              background: modoFecha === opt.id ? '#fff' : 'transparent',
+              boxShadow: modoFecha === opt.id ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+              cursor: 'pointer', fontFamily: 'inherit', color: modoFecha === opt.id ? AZUL : '#666',
+              fontWeight: modoFecha === opt.id ? 600 : 400,
+            }}>{opt.label}</button>
+          ))}
+        </div>
+        {modoFecha === 'rango' ? (
+          <>
+            <Input type="date" value={filtros.desde} onChange={setFiltro('desde')} style={{ width: 'auto' }} title="Desde" />
+            <Input type="date" value={filtros.hasta} onChange={setFiltro('hasta')} style={{ width: 'auto' }} title="Hasta" />
+          </>
+        ) : (
+          <Input type="month" value={mes} onChange={e => setMes(e.target.value)} style={{ width: 'auto' }} title="Mes" />
+        )}
+        {(Object.values(filtros).some(Boolean) || proyectosSel.size > 0 || modoFecha === 'mes') && (
+          <Boton variante="texto" onClick={() => { setFiltros(FILTROS_VACIOS); setProyectosSel(new Set()); setModoFecha('rango'); }}>Limpiar filtros</Boton>
         )}
       </div>
 

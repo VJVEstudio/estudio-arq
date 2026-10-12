@@ -84,8 +84,8 @@ export default function Dashboard() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '28px' }}>
             <Metrica label="Proyectos activos" valor={datos?.proyectos?.length || 0} subtexto="En curso ahora" onClick={() => navigate('/admin/proyectos')} />
-            <Metrica label="Ingresos del mes" valor={fmt(totIngARS)} subtexto="En pesos argentinos" color="#1b5e20" onClick={() => navigate('/admin/ingresos')} />
-            <Metrica label="Egresos del mes" valor={fmt(totEgrARS)} subtexto="En pesos argentinos" color="#b71c1c" onClick={() => navigate('/admin/egresos')} />
+            <Metrica label="Ingresos del mes" valor={fmt(totIngARS)} subtexto="En pesos argentinos" color="#1b5e20" onClick={() => navigate('/admin/movimientos?vista=ingresos')} />
+            <Metrica label="Egresos del mes" valor={fmt(totEgrARS)} subtexto="En pesos argentinos" color="#b71c1c" onClick={() => navigate('/admin/movimientos?vista=egresos')} />
             <Metrica label="Resultado del mes" valor={fmt(totIngARS - totEgrARS)} subtexto="Ingresos − Egresos ARS"
               color={totIngARS - totEgrARS >= 0 ? '#1b5e20' : '#b71c1c'}
               onClick={() => navigate('/admin/reportes')} />
@@ -93,7 +93,7 @@ export default function Dashboard() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
             {[
-              { titulo: 'Últimos ingresos', datos: datos?.ingresos, ruta: '/admin/ingresos', renderFila: (i) => (
+              { titulo: 'Últimos ingresos', datos: datos?.ingresos, ruta: '/admin/movimientos?vista=ingresos', renderFila: (i) => (
                 <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 18px', borderBottom: '1px solid #e0e0e0', fontSize: '13px' }}>
                   <div>
                     <p style={{ margin: 0, fontWeight: 500 }}>{i.cliente_nombre}</p>
@@ -102,7 +102,7 @@ export default function Dashboard() {
                   <span style={{ fontWeight: 600, color: '#1b5e20' }}>{fmt(i.monto, i.moneda)}</span>
                 </div>
               )},
-              { titulo: 'Últimos egresos', datos: datos?.egresos, ruta: '/admin/egresos', renderFila: (e) => (
+              { titulo: 'Últimos egresos', datos: datos?.egresos, ruta: '/admin/movimientos?vista=egresos', renderFila: (e) => (
                 <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 18px', borderBottom: '1px solid #e0e0e0', fontSize: '13px' }}>
                   <div>
                     <p style={{ margin: 0, fontWeight: 500 }}>{e.destinatario_nombre}</p>
@@ -131,8 +131,8 @@ export default function Dashboard() {
             <p style={{ margin: '0 0 14px', fontWeight: 500, fontSize: '14px' }}>Acciones rápidas</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' }}>
               {[
-                { icono: '↑', label: 'Registrar ingreso',  descripcion: 'Nuevo cobro de cliente',        to: '/admin/ingresos' },
-                { icono: '↓', label: 'Registrar egreso',   descripcion: 'Nuevo gasto del estudio',       to: '/admin/egresos' },
+                { icono: '↑', label: 'Registrar ingreso',  descripcion: 'Nuevo cobro de cliente',        to: '/admin/movimientos?vista=ingresos&nuevo=ingreso' },
+                { icono: '↓', label: 'Registrar egreso',   descripcion: 'Nuevo gasto del estudio',       to: '/admin/movimientos?vista=egresos&nuevo=egreso' },
                 { icono: '⇄', label: 'Ver balance',        descripcion: 'Estado de cuentas entre socios', to: '/admin/balance' },
                 { icono: '📊', label: 'Reporte general',   descripcion: 'Resumen financiero del estudio', to: '/admin/reportes' },
               ].map(a => <AccesoRapido key={a.to} {...a} navigate={navigate} />)}
