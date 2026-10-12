@@ -12,8 +12,8 @@ const TIPOS_HONORARIOS = ['RHDT', 'RHP'];
 
 const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
-    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtF = (f) => {
   if (!f) return '—';
   const fecha = typeof f === 'string' ? f.split('T')[0] : f;

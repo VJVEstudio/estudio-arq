@@ -6,8 +6,8 @@ import { get } from '../../lib/api';
 const AZUL = '#1a2744';
 const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
-    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtF = (f) => f ? new Date(f + 'T00:00:00').toLocaleDateString('es-AR') : '—';
 
 function Metrica({ label, valor, subtexto, color = AZUL, onClick }) {

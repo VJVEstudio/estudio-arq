@@ -7,8 +7,8 @@ const AZUL = '#1a2744';
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
-    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtH = (h) => `${Number(h || 0).toFixed(1)} h`;
 
 const CAT_LABELS = { servicios: 'Servicios', impuestos: 'Impuestos', generales: 'Gastos generales', dibujantes: 'Dibujantes' };
@@ -260,7 +260,13 @@ export default function ReporteGeneral() {
         <>
           <TarjetasTotales ingresos={reporte.ingresos} egresos={reporte.egresos} porProyecto={reporte.por_proyecto} />
           <EgresosPorCategoria egresos={reporte.egresos} />
-          <TablaPorProyecto proyectos={reporte.por_proyecto} onVerReporte={(id) => navigate(`/admin/reportes/proyecto/${id}`)} cotizacion={reporte.cotizacion_oficial} />
+          <TablaPorProyecto proyectos={reporte.por_proyecto} onVerReporte={(id) => {
+            // Abre el reporte del proyecto con el mismo período que se está mirando acá
+            const p = new URLSearchParams();
+            if (desde) p.set('desde', desde);
+            if (hasta) p.set('hasta', hasta);
+            navigate(`/admin/reportes/proyecto/${id}${p.toString() ? `?${p}` : ''}`);
+          }} cotizacion={reporte.cotizacion_oficial} />
           <TablaDibujantes dibujantes={reporte.por_dibujante} />
         </>
       )}

@@ -151,7 +151,7 @@ export default function MisHoras() {
     });
   })();
 
-  const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+  const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const tarifaHora = horas.length > 0 ? Number(horas[0].tarifa_aplicada) : 0;
   const totalHoras = horasFiltradas.reduce((s, h) => s + Number(h.horas), 0);
   const totalRegistros = horasFiltradas.length;

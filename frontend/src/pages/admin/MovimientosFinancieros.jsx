@@ -29,8 +29,8 @@ const CAT_COLORES = {
 
 const fmt = (monto, moneda) =>
   moneda === 'USD'
-    ? `U$S ${Number(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$ ${Number(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    ? `U$S ${Number(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Number(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtF = (f) => {
   if (!f) return '—';
   const fecha = typeof f === 'string' ? f.split('T')[0] : f;

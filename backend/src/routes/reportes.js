@@ -7,8 +7,21 @@ const { tarifaSQL, costoSQL, monotributoSQL, joinLiqSQL, liquidadaSQL } = requir
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
 
+// Período opcional (?desde=AAAA-MM-DD&hasta=AAAA-MM-DD) para los reportes de un proyecto.
+// Va como parámetros $2 y $3 de cada consulta; vacío = todo el proyecto.
+function periodo(req) {
+  const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const desde = fecha(req.query.desde), hasta = fecha(req.query.hasta);
+  return {
+    desde, hasta,
+    params: (id) => [id, desde, hasta],
+    sql: (a) => `AND ($2::date IS NULL OR ${a}.fecha >= $2::date) AND ($3::date IS NULL OR ${a}.fecha <= $3::date)`,
+  };
+}
+
 router.get('/proyecto/:id', async (req, res) => {
   const { id } = req.params;
+  const per = periodo(req);
   const { rows: [proyecto] } = await query(
     `SELECT p.*, c.nombre_razon_social AS cliente_nombre, c.cuit, c.email AS cliente_email
      FROM proyectos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1`, [id]
@@ -24,7 +37,7 @@ router.get('/proyecto/:id', async (req, res) => {
      LEFT JOIN socios s ON s.id = i.socio_id
      LEFT JOIN ingreso_socios isc ON isc.ingreso_id = i.id
      LEFT JOIN socios sc ON sc.id = isc.socio_id
-     WHERE i.proyecto_id = $1 GROUP BY i.id, s.nombre ORDER BY i.fecha ASC`, [id]
+     WHERE i.proyecto_id = $1 ${per.sql('i')} GROUP BY i.id, s.nombre ORDER BY i.fecha ASC`, per.params(id)
   );
 
   // Egresos directos: excluye 'dibujantes' (doble conteo con horas) y las extracciones de socios (no son gasto)
@@ -34,7 +47,7 @@ router.get('/proyecto/:id', async (req, res) => {
      FROM egresos e
      JOIN destinatarios d ON d.id = e.destinatario_id
      LEFT JOIN socios s ON s.id = e.socio_id
-     WHERE e.proyecto_id = $1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ORDER BY e.fecha ASC`, [id]
+     WHERE e.proyecto_id = $1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ${per.sql('e')} ORDER BY e.fecha ASC`, per.params(id)
   );
 
   // Horas: liquidadas a la tarifa de su liquidación; sin liquidar, a la tarifa actual
@@ -44,7 +57,7 @@ router.get('/proyecto/:id', async (req, res) => {
             ${tarifaSQL()} AS tarifa_valuada, ${monotributoSQL()} AS monotributo_valuado,
             ${costoSQL()} AS costo_valuado, ${liquidadaSQL()} AS liquidada
      FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id ${joinLiqSQL()}
-     WHERE h.proyecto_id = $1 ORDER BY h.fecha ASC`, [id]
+     WHERE h.proyecto_id = $1 ${per.sql('h')} ORDER BY h.fecha ASC`, per.params(id)
   );
 
   const totales = { ARS: { ingresos: 0, egresos: 0 }, USD: { ingresos: 0, egresos: 0 } };
@@ -81,6 +94,7 @@ router.get('/proyecto/:id', async (req, res) => {
 
   res.json({
     proyecto, ingresos, egresos, horas,
+    periodo: { desde: per.desde, hasta: per.hasta },
     totales: {
       ARS: { ingresos: totales.ARS.ingresos, egresos: totales.ARS.egresos, resultado: totales.ARS.ingresos - totales.ARS.egresos },
       USD: { ingresos: totales.USD.ingresos, egresos: totales.USD.egresos, resultado: totales.USD.ingresos - totales.USD.egresos },
@@ -95,6 +109,7 @@ router.get('/proyecto/:id', async (req, res) => {
 
 router.get('/proyecto/:id/csv', async (req, res) => {
   const { id } = req.params;
+  const per = periodo(req);
   const { rows: [proyecto] } = await query(
     `SELECT p.nombre, c.nombre_razon_social AS cliente FROM proyectos p JOIN clientes c ON c.id=p.cliente_id WHERE p.id=$1`, [id]
   );
@@ -102,20 +117,20 @@ router.get('/proyecto/:id/csv', async (req, res) => {
   const { rows: ingresos } = await query(
     `SELECT i.fecha, 'Ingreso' AS tipo, d.nombre_razon_social AS contraparte,
             i.moneda, i.monto, i.tipo AS subtipo, i.comprobante, i.descripcion
-     FROM ingresos i JOIN clientes d ON d.id=i.cliente_id WHERE i.proyecto_id=$1`, [id]
+     FROM ingresos i JOIN clientes d ON d.id=i.cliente_id WHERE i.proyecto_id=$1 ${per.sql('i')}`, per.params(id)
   );
   const { rows: egresos } = await query(
     `SELECT e.fecha, 'Egreso' AS tipo, d.nombre AS contraparte,
             e.moneda, e.monto, e.categoria AS subtipo, e.comprobante, e.descripcion
      FROM egresos e JOIN destinatarios d ON d.id=e.destinatario_id
-     WHERE e.proyecto_id=$1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio')`, [id]
+     WHERE e.proyecto_id=$1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ${per.sql('e')}`, per.params(id)
   );
   const { rows: horas } = await query(
     `SELECT h.fecha, 'Horas' AS tipo, d.nombre AS contraparte,
             'ARS' AS moneda, ${costoSQL()} AS monto,
             CONCAT(h.horas, ' hs', CASE WHEN ${liquidadaSQL()} THEN '' ELSE ' (sin liquidar, tarifa actual)' END) AS subtipo,
             '' AS comprobante, h.descripcion_tarea AS descripcion
-     FROM horas_dibujantes h JOIN dibujantes d ON d.id=h.dibujante_id ${joinLiqSQL()} WHERE h.proyecto_id=$1`, [id]
+     FROM horas_dibujantes h JOIN dibujantes d ON d.id=h.dibujante_id ${joinLiqSQL()} WHERE h.proyecto_id=$1 ${per.sql('h')}`, per.params(id)
   );
   const filas = [...ingresos, ...egresos, ...horas].sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
   const enc = ['Fecha', 'Tipo', 'Contraparte', 'Moneda', 'Monto', 'Subtipo', 'Comprobante', 'Descripción'];
@@ -265,6 +280,7 @@ router.get('/general/csv', async (req, res) => {
 router.get('/proyecto/:id/pdf', async (req, res) => {
   const PDFDocument = require('pdfkit');
   const { id } = req.params;
+  const per = periodo(req);
 
   const { rows: [proyecto] } = await query(
     `SELECT p.*, c.nombre_razon_social AS cliente_nombre
@@ -276,21 +292,21 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
     `SELECT i.fecha, i.monto, i.moneda, i.tipo, i.descripcion, i.comprobante,
             i.cotizacion_dolar, s.nombre AS socio_nombre, i.es_del_estudio
      FROM ingresos i LEFT JOIN socios s ON s.id = i.socio_id
-     WHERE i.proyecto_id = $1 ORDER BY i.fecha ASC`, [id]
+     WHERE i.proyecto_id = $1 ${per.sql('i')} ORDER BY i.fecha ASC`, per.params(id)
   );
 
   const { rows: egresos } = await query(
     `SELECT e.fecha, e.monto, e.moneda, e.categoria, e.descripcion, e.comprobante,
             e.cotizacion_dolar, d.nombre AS destinatario_nombre
      FROM egresos e JOIN destinatarios d ON d.id = e.destinatario_id
-     WHERE e.proyecto_id = $1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ORDER BY e.fecha ASC`, [id]
+     WHERE e.proyecto_id = $1 AND e.categoria NOT IN ('dibujantes', 'extraccion_socio') ${per.sql('e')} ORDER BY e.fecha ASC`, per.params(id)
   );
 
   const { rows: horas } = await query(
     `SELECT h.fecha, h.horas, h.descripcion_tarea, d.nombre AS dibujante_nombre,
             ${tarifaSQL()} AS tarifa_hora_base, ${costoSQL()} AS costo_actual, ${liquidadaSQL()} AS liquidada
      FROM horas_dibujantes h JOIN dibujantes d ON d.id = h.dibujante_id ${joinLiqSQL()}
-     WHERE h.proyecto_id = $1 ORDER BY h.fecha ASC`, [id]
+     WHERE h.proyecto_id = $1 ${per.sql('h')} ORDER BY h.fecha ASC`, per.params(id)
   );
 
   const cotizacionActual = await obtenerCotizacionOficial();
@@ -332,7 +348,7 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
   doc.fontSize(11).font('Helvetica').fillColor('#666')
     .text(`${proyecto.cliente_nombre} · ${proyecto.estado}`, margen, margen + 22);
   doc.fontSize(9).fillColor('#999')
-    .text(`Generado el ${new Date().toLocaleDateString('es-AR')}`, margen, margen + 38);
+    .text(`Generado el ${new Date().toLocaleDateString('es-AR')} · Período: ${per.desde || per.hasta ? `${per.desde ? fmtF(per.desde) : 'inicio'} al ${per.hasta ? fmtF(per.hasta) : 'hoy'}` : 'todo el proyecto'}`, margen, margen + 38);
   doc.moveDown(3);
 
   // Resumen financiero

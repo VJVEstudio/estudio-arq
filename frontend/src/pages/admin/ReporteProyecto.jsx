@@ -1,14 +1,14 @@
 import { useState, useEffect, Fragment } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { get, getAccessToken } from '../../lib/api';
-import { AlertaError, Boton, Select } from '../../components/ui';
+import { AlertaError, Boton, Select, Input } from '../../components/ui';
 
 const AZUL = '#1a2744';
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 const fmt = (n, moneda) =>
   moneda === 'USD'
-    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtF = (f) => {
   if (!f) return '—';
   const fecha = typeof f === 'string' ? f.split('T')[0] : f;
@@ -182,16 +182,42 @@ export default function ReporteProyecto() {
   const [cargando,     setCargando]     = useState(true);
   const [error,        setError]        = useState(null);
   const [monedaFiltro, setMonedaFiltro] = useState('');
+  // Período en la dirección (?desde=&hasta=): así "Ver reporte" desde el reporte general
+  // abre el mismo período. Sin fechas = todo el proyecto.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const desde = searchParams.get('desde') || '';
+  const hasta = searchParams.get('hasta') || '';
+  const setPeriodo = (d, h) => {
+    const p = new URLSearchParams();
+    if (d) p.set('desde', d);
+    if (h) p.set('hasta', h);
+    setSearchParams(p, { replace: true });
+  };
+  const iso = (d) => d.toISOString().split('T')[0];
+  const ultimosMeses = (meses) => {
+    const inicio = new Date();
+    inicio.setMonth(inicio.getMonth() - meses + 1);
+    inicio.setDate(1);
+    setPeriodo(iso(inicio), iso(new Date()));
+  };
+  const qsPeriodo = () => {
+    const p = new URLSearchParams();
+    if (desde) p.set('desde', desde);
+    if (hasta) p.set('hasta', hasta);
+    const s = p.toString();
+    return s ? `&${s}` : '';
+  };
 
   useEffect(() => {
     const cargar = async () => {
       setCargando(true);
-      try { setReporte(await get(`/reportes/proyecto/${id}`)); }
+      try { setReporte(await get(`/reportes/proyecto/${id}?${qsPeriodo().slice(1)}`)); }
       catch (err) { setError(err.message); }
       finally { setCargando(false); }
     };
     cargar();
-  }, [id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, desde, hasta]);
 
   if (cargando) return <div style={{ padding: '32px', fontSize: '14px', color: '#666' }}>Generando reporte…</div>;
   if (error)    return <div style={{ padding: '32px' }}><AlertaError mensaje={error} /></div>;
@@ -224,14 +250,42 @@ export default function ReporteProyecto() {
           <div style={{ display: 'flex', gap: '8px' }}>
             <Boton variante="secundario" onClick={() => {
               const token = getAccessToken();
-              window.open(`${BASE}/reportes/proyecto/${id}/csv?token=${token}`, '_blank');
+              window.open(`${BASE}/reportes/proyecto/${id}/csv?token=${token}${qsPeriodo()}`, '_blank');
             }}>⬇ CSV</Boton>
             <Boton variante="secundario" onClick={() => {
               const token = getAccessToken();
-              window.open(`${BASE}/reportes/proyecto/${id}/pdf?token=${token}`, '_blank');
+              window.open(`${BASE}/reportes/proyecto/${id}/pdf?token=${token}${qsPeriodo()}`, '_blank');
             }}>⬇ PDF</Boton>
           </div>
         </div>
+      </div>
+
+      <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '14px 18px', marginBottom: '20px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: '13px', fontWeight: 500 }}>Período</span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <label style={{ fontSize: '13px', color: '#666' }}>Desde</label>
+          <Input type="date" value={desde} onChange={e => setPeriodo(e.target.value, hasta)} style={{ width: 'auto' }} />
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <label style={{ fontSize: '13px', color: '#666' }}>Hasta</label>
+          <Input type="date" value={hasta} onChange={e => setPeriodo(desde, e.target.value)} style={{ width: 'auto' }} />
+        </div>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {[{ label: 'Todo el proyecto', meses: 0 }, { label: 'Este mes', meses: 1 }, { label: '3 meses', meses: 3 }, { label: '6 meses', meses: 6 }, { label: 'Este año', meses: 12 }].map(p => {
+            const activo = p.meses === 0 && !desde && !hasta;
+            return (
+              <button key={p.label} onClick={() => (p.meses ? ultimosMeses(p.meses) : setPeriodo('', ''))} style={{
+                padding: '5px 12px', fontSize: '12px', borderRadius: '20px', cursor: 'pointer', fontFamily: 'inherit', border: `1px solid ${activo ? AZUL : '#d0d0d0'}`,
+                background: activo ? AZUL : 'transparent', color: activo ? '#fff' : '#666',
+              }}>{p.label}</button>
+            );
+          })}
+        </div>
+        <span style={{ fontSize: '12px', color: desde || hasta ? '#b26a00' : '#999', marginLeft: 'auto' }}>
+          {desde || hasta
+            ? `Mostrando del ${desde ? fmtF(desde) : 'inicio'} al ${hasta ? fmtF(hasta) : 'hoy'}`
+            : 'Mostrando todo el proyecto'}
+        </span>
       </div>
 
       <div style={{ display: 'flex', gap: '16px', marginBottom: '28px', flexWrap: 'wrap' }}>
