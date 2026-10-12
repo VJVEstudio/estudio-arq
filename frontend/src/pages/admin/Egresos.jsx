@@ -30,8 +30,8 @@ const CAT_COLORES = {
 };
 const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
-    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtFecha = (f) => {
   if (!f) return '—';
   const fecha = typeof f === 'string' ? f.split('T')[0] : f;

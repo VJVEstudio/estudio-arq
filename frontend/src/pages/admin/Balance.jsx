@@ -8,8 +8,8 @@ import {
 const AZUL = '#1a2744';
 const fmt = (monto, moneda) =>
   moneda === 'USD'
-    ? `U$S ${Math.abs(Number(monto)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-    : `$ ${Math.abs(Number(monto)).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+    ? `U$S ${Math.abs(Number(monto)).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `$ ${Math.abs(Number(monto)).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtF = (f) => f ? new Date(f + 'T00:00:00').toLocaleDateString('es-AR') : '—';
 const signoColor = (n) => Number(n) > 0 ? '#1b5e20' : Number(n) < 0 ? '#b71c1c' : '#666';
 

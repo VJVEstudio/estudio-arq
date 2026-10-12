@@ -13,7 +13,7 @@ function formatearFecha(valorFecha) {
   return `${dia}/${mes}/${anio}`;
 }
 
-const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+const fmt = (n) => `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function MisLiquidaciones() {
   const [liquidaciones, setLiquidaciones] = useState([]);
