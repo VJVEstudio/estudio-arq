@@ -23,6 +23,7 @@ app.use('/api/destinatarios', require('./routes/destinatarios'));
 app.use('/api/balance',       require('./routes/balance'));
 app.use('/api/dibujantes',    require('./routes/dibujantes'));
 app.use('/api/horas',         require('./routes/horas'));
+app.use('/api/liquidaciones', require('./routes/liquidaciones'));
 app.use('/api/reportes',      require('./routes/reportes'));
 app.use('/api/socios',        require('./routes/socios'));
 app.use('/api/rendiciones',   require('./routes/rendiciones'));

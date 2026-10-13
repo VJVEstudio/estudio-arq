@@ -3,6 +3,7 @@ const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 
 const { costoTarifaSQL, joinLiqSQL } = require('../utils/costoHoras');
+const { repartirLiquidacion, descripcionLiquidacion } = require('../utils/repartoLiquidacion');
 const router = express.Router();
 router.use(auth.verificar);
 
@@ -328,26 +329,10 @@ router.post('/liquidar', auth.soloAdmin, async (req, res) => {
       porProyecto[h.proyecto_id] += Number(h.horas);
     });
 
-    // Un egreso por proyecto: horas × tarifa + la parte del monotributo que le toca
-    // a ese proyecto (proporcional a sus horas). Se trabaja en centavos y la diferencia
-    // de redondeo va al último proyecto, así la suma de los egresos es exactamente
-    // el total de la liquidación (lo mismo que se transfiere al dibujante).
-    const proyectosLiq = Object.entries(porProyecto);
-    const totalCent = Math.round(monto_total * 100);
-    let asignadoCent = 0;
-    const montosPorProyecto = proyectosLiq.map(([pid, hs], i) => {
-      let cent;
-      if (i === proyectosLiq.length - 1) {
-        cent = totalCent - asignadoCent;
-      } else {
-        const horasCent = Math.round(hs * tarifaActual * 100);
-        const monoCent = horas_totales > 0 ? Math.round(monotributoMonto * 100 * (hs / horas_totales)) : 0;
-        cent = horasCent + monoCent;
-      }
-      asignadoCent += cent;
-      return [pid, cent / 100];
-    });
-    const descripcionEgreso = `Honorarios dibujante — ${mes}/${anio}${monotributoMonto > 0 ? ' (incluye monotributo)' : ''}`;
+    // Un egreso por proyecto (horas × tarifa + su parte del monotributo); la suma es
+    // exactamente el total liquidado. Ver utils/repartoLiquidacion.js
+    const { montos: montosPorProyecto } = repartirLiquidacion(porProyecto, tarifaActual, monotributoMonto);
+    const descripcionEgreso = descripcionLiquidacion(mes, anio, monotributoMonto);
 
     const egresosCreados = [];
     for (const [proyecto_id_actual, monto_proyecto] of montosPorProyecto) {
