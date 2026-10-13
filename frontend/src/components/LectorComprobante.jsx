@@ -33,6 +33,28 @@ export function buscarCoincidencia(lista, { cuit, nombre }, campoNombre) {
   return parciales.length === 1 ? parciales[0] : null;
 }
 
+// Cuando el registro viene de un movimiento del banco, la fecha y el monto del banco
+// son los reales (fecha de pago y monto neto de retenciones). En ese caso la factura
+// no los reemplaza: sus datos se agregan a la descripción. Una nueva factura reemplaza
+// la línea de la anterior, sin duplicarla.
+export function descripcionConFactura(descripcionActual, datos, montoBanco, moneda) {
+  const fmtM = (n) => `${moneda === 'USD' ? 'U$S' : '$'} ${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtF = (f) => { const [a, m, d] = String(f).slice(0, 10).split('-'); return d && m && a ? `${d}/${m}/${a}` : f; };
+  const total = Number(datos.monto_total) || (Number(datos.monto_neto || 0) + Number(datos.iva || 0) + Number(datos.iibb || 0));
+  const partes = ['Factura'];
+  if (datos.numero_comprobante) partes.push(`N° ${datos.numero_comprobante}`);
+  if (datos.fecha) partes.push(`del ${fmtF(datos.fecha)}`);
+  if (total > 0) partes.push(`por ${fmtM(total)}`);
+  let linea = partes.join(' ');
+  const banco = Number(montoBanco);
+  if (total > 0 && banco > 0 && Math.round(total * 100) !== Math.round(banco * 100)) {
+    linea += ` · diferencia con el banco ${fmtM(total - banco)} (retenciones)`;
+  }
+  if (datos.descripcion) linea += ` · ${datos.descripcion}`;
+  const base = String(descripcionActual || '').split('\n').filter(l => !l.startsWith('Factura')).join('\n').trim();
+  return base ? `${base}\n${linea}` : linea;
+}
+
 // Recuadro para subir una foto o PDF de la factura y autocompletar el formulario.
 // `endpoint` es la ruta del backend (ej: '/egresos/ocr'); `onDatos` recibe lo leído.
 export default function LectorComprobante({ endpoint, archivoUrl, onDatos }) {

@@ -523,6 +523,7 @@ export default function Banco() {
         <Modal titulo={`Nuevo ingreso desde el banco — ${fmt(modal.mov.importe)}`} onCerrar={() => setModal(null)} ancho={680}>
           <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#666' }}>Banco: {fmtF(modal.mov.fecha)} · {modal.mov.descripcion}</p>
           <FormIngreso
+            desdeBanco
             inicial={{
               cliente_id: modal.mov.cliente_sugerido_id || '', proyecto_id: modal.mov.proyecto_sugerido_id || '',
               monto: String(Math.abs(Number(modal.mov.importe))),
@@ -543,6 +544,7 @@ export default function Banco() {
             </div>
           )}
           <FormEgreso
+            desdeBanco
             inicial={{
               destinatario_id: modal.mov.destinatario_sugerido_id || '', proyecto_id: modal.mov.proyecto_sugerido_id || '',
               categoria: modal.mov.destinatario_es_dibujante ? 'dibujantes' : (modal.mov.categoria_sugerida || 'generales'),
