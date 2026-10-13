@@ -5,7 +5,7 @@ import {
   EncabezadoSeccion, Boton, Tabla, Fila, Celda, Badge,
   Modal, Campo, Input, Select, Textarea, AlertaError, Buscador,
 } from '../../components/ui';
-import LectorComprobante, { buscarCoincidencia } from '../../components/LectorComprobante';
+import LectorComprobante, { buscarCoincidencia, descripcionConFactura } from '../../components/LectorComprobante';
 
 const fmt = (monto, moneda) =>
   moneda === 'USD'
@@ -39,7 +39,7 @@ function TarjetasResumen({ resumen }) {
   );
 }
 
-export function FormIngreso({ inicial = {}, clientes, proyectos, socios, onGuardar, onCancelar, guardando, errorServidor }) {  const [form, setForm] = useState({
+export function FormIngreso({ inicial = {}, clientes, proyectos, socios, onGuardar, onCancelar, guardando, errorServidor, desdeBanco = false }) {  const [form, setForm] = useState({
     cliente_id:    inicial.cliente_id    || '',
     proyecto_id:   inicial.proyecto_id   || '',
     monto:         inicial.monto         || '',
@@ -86,13 +86,18 @@ export function FormIngreso({ inicial = {}, clientes, proyectos, socios, onGuard
       ...p,
       cliente_id:  cliente ? cliente.id : p.cliente_id,
       proyecto_id: cliente && cliente.id !== p.cliente_id ? '' : p.proyecto_id,
-      monto:       total > 0 ? String(total) : p.monto,
-      moneda:      datos.moneda === 'USD' || datos.moneda === 'ARS' ? datos.moneda : p.moneda,
       tipo:        'facturado',
-      fecha:       datos.fecha || p.fecha,
       comprobante: datos.numero_comprobante || p.comprobante,
-      descripcion: datos.descripcion || p.descripcion,
       archivo_url: datos.archivo_url || p.archivo_url,
+      // Desde el banco se mantienen la fecha y el monto del depósito; la factura va a la descripción
+      ...(desdeBanco
+        ? { descripcion: descripcionConFactura(p.descripcion, datos, p.monto, p.moneda) }
+        : {
+            monto:       total > 0 ? String(total) : p.monto,
+            moneda:      datos.moneda === 'USD' || datos.moneda === 'ARS' ? datos.moneda : p.moneda,
+            fecha:       datos.fecha || p.fecha,
+            descripcion: datos.descripcion || p.descripcion,
+          }),
     }));
   };
 

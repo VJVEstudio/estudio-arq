@@ -6,7 +6,7 @@ import {
   EncabezadoSeccion, Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, Textarea, AlertaError, Buscador,
 } from '../../components/ui';
-import LectorComprobante, { buscarCoincidencia } from '../../components/LectorComprobante';
+import LectorComprobante, { buscarCoincidencia, descripcionConFactura } from '../../components/LectorComprobante';
 
 const CATEGORIAS = [
   { value: 'servicios',  label: 'Servicios' },
@@ -99,7 +99,7 @@ function NuevoDestinatario({ inicial = {}, onCrear, onCancelar }) {
   );
 }
 
-export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onNuevoDestinatario, onGuardar, onCancelar, guardando, errorServidor, destinatarioSugerido = null }) {  const [form, setForm] = useState({
+export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onNuevoDestinatario, onGuardar, onCancelar, guardando, errorServidor, destinatarioSugerido = null, desdeBanco = false }) {  const [form, setForm] = useState({
     destinatario_id:    inicial.destinatario_id    || '',
     proyecto_id:        inicial.proyecto_id        || '',
     categoria:          inicial.categoria          || 'generales',
@@ -153,12 +153,17 @@ export function FormEgreso({ inicial = {}, proyectos, socios, destinatarios, onN
     setForm(p => ({
       ...p,
       destinatario_id: dest ? dest.id : p.destinatario_id,
-      monto:       total > 0 ? String(total) : p.monto,
-      moneda:      datos.moneda === 'USD' || datos.moneda === 'ARS' ? datos.moneda : p.moneda,
-      fecha:       datos.fecha || p.fecha,
       comprobante: datos.numero_comprobante || p.comprobante,
-      descripcion: datos.descripcion || p.descripcion,
       archivo_url: datos.archivo_url || p.archivo_url,
+      // Desde el banco se mantienen la fecha y el monto del pago; la factura va a la descripción
+      ...(desdeBanco
+        ? { descripcion: descripcionConFactura(p.descripcion, datos, p.monto, p.moneda) }
+        : {
+            monto:       total > 0 ? String(total) : p.monto,
+            moneda:      datos.moneda === 'USD' || datos.moneda === 'ARS' ? datos.moneda : p.moneda,
+            fecha:       datos.fecha || p.fecha,
+            descripcion: datos.descripcion || p.descripcion,
+          }),
     }));
   };
 
