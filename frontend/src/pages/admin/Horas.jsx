@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { get, post, getAccessToken } from '../../lib/api';
+import LiquidacionesDibujantes from './LiquidacionesDibujantes';
 import {
   EncabezadoSeccion, Tabla, Fila, Celda,
   Select, Input, AlertaError, Boton, Modal, Campo,
@@ -367,7 +368,7 @@ export default function Horas() {
         )}
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
-          {['resumen', 'detalle', 'liquidar'].map(v => (
+          {['resumen', 'detalle', 'liquidar', 'liquidaciones'].map(v => (
             <button key={v} onClick={() => setVista(v)} style={{
               padding: '6px 14px', fontSize: '13px', borderRadius: '20px', border: '1px solid',
               borderColor: vista === v ? AZUL : '#d0d0d0',
@@ -375,7 +376,7 @@ export default function Horas() {
               color:       vista === v ? 'white' : '#666',
               cursor: 'pointer', fontFamily: 'inherit',
             }}>
-              {v === 'detalle' ? 'Detalle' : v === 'resumen' ? 'Por dibujante' : `💰 Liquidar (${pendientes.length})`}
+              {v === 'detalle' ? 'Detalle' : v === 'resumen' ? 'Por dibujante' : v === 'liquidaciones' ? '📒 Liquidaciones' : `💰 Liquidar (${pendientes.length})`}
             </button>
           ))}
         </div>
@@ -383,7 +384,8 @@ export default function Horas() {
 
       {error && <AlertaError mensaje={error} />}
 
-      {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
+      {vista === 'liquidaciones' ? <LiquidacionesDibujantes filtros={filtrosEfectivos} />
+      : cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
       : vista === 'resumen' ? <TablaResumen resumen={resumen} />
       : vista === 'liquidar' ? (
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '24px' }}>
