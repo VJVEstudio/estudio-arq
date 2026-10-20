@@ -26,6 +26,9 @@ const NAV = [
   { grupo: 'Obras', items: [
     { to: '/admin/rendiciones', label: 'Rendiciones', icono: '📋' },
   ]},
+  { grupo: 'Configuración', items: [
+    { to: '/admin/usuarios', label: 'Usuarios', icono: '👤' },
+  ]},
 ];
 
 function Sidebar({ colapsado, onToggle }) {

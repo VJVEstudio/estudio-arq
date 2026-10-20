@@ -16,6 +16,7 @@ import Dibujantes      from './pages/admin/Dibujantes';
 import Horas           from './pages/admin/Horas';
 import ReporteGeneral  from './pages/admin/ReporteGeneral';
 import ReporteProyecto from './pages/admin/ReporteProyecto';
+import Usuarios        from './pages/admin/Usuarios';
 
 import MisHoras from './pages/dibujante/MisHoras';
 import MisLiquidaciones from './pages/dibujante/MisLiquidaciones';
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="/admin/horas"                 element={<Horas />} />
               <Route path="/admin/reportes"              element={<ReporteGeneral />} />
               <Route path="/admin/reportes/proyecto/:id" element={<ReporteProyecto />} />
+              <Route path="/admin/usuarios"              element={<Usuarios />} />
             </Route>
           </Route>
 
