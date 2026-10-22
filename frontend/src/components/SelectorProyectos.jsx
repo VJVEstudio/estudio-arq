@@ -6,7 +6,8 @@ export const SIN_PROYECTO = '__sin_proyecto__';
 // Selector de varios proyectos con casillas, agrupados por cliente.
 // `seleccion` es un Set de ids (incluye SIN_PROYECTO para movimientos sin proyecto).
 // Un Set vacío significa "todos los proyectos".
-export default function SelectorProyectos({ proyectos, seleccion, onCambiar }) {
+// `incluirSinProyecto` muestra la opción "Sin proyecto" (no aplica, por ejemplo, a las horas).
+export default function SelectorProyectos({ proyectos, seleccion, onCambiar, incluirSinProyecto = true }) {
   const [abierto, setAbierto] = useState(false);
   const [buscar, setBuscar] = useState('');
   const ref = useRef(null);
@@ -72,7 +73,7 @@ export default function SelectorProyectos({ proyectos, seleccion, onCambiar }) {
             )}
           </div>
           <div style={{ maxHeight: '360px', overflowY: 'auto', padding: '6px' }}>
-            {!b && (
+            {!b && incluirSinProyecto && (
               <label style={fila}>
                 <input type="checkbox" checked={seleccion.has(SIN_PROYECTO)} onChange={() => alternar(SIN_PROYECTO)} />
                 <span style={{ color: '#666', fontStyle: 'italic' }}>Sin proyecto</span>

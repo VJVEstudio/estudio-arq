@@ -7,23 +7,35 @@ const { repartirLiquidacion, descripcionLiquidacion } = require('../utils/repart
 const router = express.Router();
 router.use(auth.verificar);
 
-router.get('/', async (req, res) => {
-  const esAdmin = req.usuario.rol === 'admin';
-  const { proyecto_id, dibujante_id, desde, hasta } = req.query;
+// ── Filtros comunes ───────────────────────────────────────────────────────────
+// Se pueden elegir varios dibujantes y varios proyectos a la vez: dibujante_ids y
+// proyecto_ids, separados por coma (dibujante_id / proyecto_id sueltos siguen andando).
+const lista = (...vals) => vals.filter(Boolean).join(',').split(',').map(v => v.trim()).filter(Boolean);
+
+function armarFiltros(q, { conDibujantes = true, conProyectos = true } = {}) {
   const condiciones = ['TRUE'];
   const params = [];
+  const dibujantes = conDibujantes ? lista(q.dibujante_ids, q.dibujante_id) : [];
+  const proyectos  = conProyectos ? lista(q.proyecto_ids, q.proyecto_id) : [];
+  if (dibujantes.length) { params.push(dibujantes); condiciones.push(`h.dibujante_id::text = ANY($${params.length})`); }
+  if (proyectos.length)  { params.push(proyectos);  condiciones.push(`h.proyecto_id::text = ANY($${params.length})`); }
+  if (q.desde) { params.push(q.desde); condiciones.push(`h.fecha >= $${params.length}`); }
+  if (q.hasta) { params.push(q.hasta); condiciones.push(`h.fecha <= $${params.length}`); }
+  return { condiciones, params, where: condiciones.join(' AND '), dibujantes, proyectos };
+}
+
+router.get('/', async (req, res) => {
+  const esAdmin = req.usuario.rol === 'admin';
+  // Un dibujante solo ve sus horas: se ignora cualquier filtro de dibujante que mande
+  const f = armarFiltros(req.query, { conDibujantes: esAdmin });
   if (!esAdmin) {
-    params.push(req.usuario.id);
-    condiciones.push(`d.usuario_id = $${params.length}`);
-  } else if (dibujante_id) {
-    params.push(dibujante_id);
-    condiciones.push(`h.dibujante_id = $${params.length}`);
+    f.params.push(req.usuario.id);
+    f.condiciones.push(`d.usuario_id = $${f.params.length}`);
   }
-  if (proyecto_id) { params.push(proyecto_id); condiciones.push(`h.proyecto_id = $${params.length}`); }
-  if (desde)       { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
-  if (hasta)       { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
+  // Admin: costo con el criterio único de la app (utils/costoHoras.js), igual que el resumen
   const camposCosto = esAdmin
-    ? ', h.tarifa_aplicada, h.costo_total, h.liquidada'
+    ? `, ${tarifaSQL()} AS tarifa_aplicada, ${costoTarifaSQL()} AS costo_horas,
+         ${monotributoSQL()} AS monotributo, ${costoSQL()} AS costo_total, h.liquidada`
     : ', h.tarifa_aplicada, h.costo_total';
   const { rows } = await query(
     `SELECT h.id, h.fecha, h.horas, h.descripcion_tarea, h.created_at,
@@ -33,52 +45,51 @@ router.get('/', async (req, res) => {
      FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
-     WHERE ${condiciones.join(' AND ')}
+     ${joinLiqSQL()}
+     WHERE ${f.condiciones.join(' AND ')}
      ORDER BY h.fecha DESC, h.created_at DESC`,
-    params
+    f.params
   );
   res.json(rows);
 });
 
-router.get('/resumen', auth.soloAdmin, async (req, res) => {
-  const { proyecto_id, dibujante_id, desde, hasta } = req.query;
-  const condiciones = ['TRUE'];
-  const params = [];
-  if (dibujante_id) { params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
-  if (proyecto_id)  { params.push(proyecto_id);  condiciones.push(`h.proyecto_id = $${params.length}`); }
-  if (desde)        { params.push(desde);         condiciones.push(`h.fecha >= $${params.length}`); }
-  if (hasta)        { params.push(hasta);         condiciones.push(`h.fecha <= $${params.length}`); }
+// Resumen por dibujante y proyecto. Lo usan la pantalla y el PDF, así muestran lo mismo.
+// costo_horas = horas × tarifa; monotributo = parte del monotributo de las liquidaciones;
+// costo_total = la suma. Las horas sin liquidar van a la tarifa actual (estimado).
+async function consultaResumen(where, params) {
   const { rows } = await query(
-    `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre,
-            d.tarifa_hora_base AS tarifa_actual,
+    `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
             p.id AS proyecto_id, p.nombre AS proyecto_nombre,
             COUNT(h.id) AS registros,
             SUM(h.horas) AS horas_totales,
-            SUM(${costoTarifaSQL()}) AS costo_total,
-            MAX(CASE WHEN d.monotributo_activo THEN d.monotributo_monto ELSE 0 END) AS monotributo
+            SUM(${costoTarifaSQL()}) AS costo_horas,
+            SUM(${monotributoSQL()}) AS monotributo,
+            SUM(${costoSQL()}) AS costo_total,
+            SUM(CASE WHEN ${liquidadaSQL()} THEN 0 ELSE h.horas END) AS horas_pendientes
      FROM horas_dibujantes h
      JOIN dibujantes d ON d.id = h.dibujante_id
      JOIN proyectos  p ON p.id = h.proyecto_id
      ${joinLiqSQL()}
-     WHERE ${condiciones.join(' AND ')}
+     WHERE ${where}
      GROUP BY d.id, d.nombre, d.tarifa_hora_base, p.id, p.nombre
      ORDER BY d.nombre, p.nombre`,
     params
   );
-  res.json(rows);
+  return rows;
+}
+
+router.get('/resumen', auth.soloAdmin, async (req, res) => {
+  const f = armarFiltros(req.query);
+  res.json(await consultaResumen(f.where, f.params));
 });
 
+// Pendientes de liquidar: la liquidación es por dibujante y mes completo, así que acá
+// solo se filtra por dibujantes y fechas (no por proyecto).
 router.get('/pendientes', auth.soloAdmin, async (req, res) => {
-  const { desde, hasta, dibujante_id } = req.query;
-  console.log('PENDIENTES query params:', req.query);
-  const condiciones = ['h.liquidada = FALSE'];
-  const params = [];
-  if (desde)        { params.push(desde);        condiciones.push(`h.fecha >= $${params.length}`); }
-  if (hasta)        { params.push(hasta);        condiciones.push(`h.fecha <= $${params.length}`); }
-  if (dibujante_id) { params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
-
+  const f = armarFiltros(req.query, { conProyectos: false });
+  f.condiciones.push('h.liquidada = FALSE');
   const { rows } = await query(`
-        SELECT
+    SELECT
       d.id AS dibujante_id,
       d.nombre AS dibujante_nombre,
       DATE_TRUNC('month', h.fecha) AS mes,
@@ -90,11 +101,11 @@ router.get('/pendientes', auth.soloAdmin, async (req, res) => {
       CASE WHEN d.monotributo_activo THEN d.monotributo_monto ELSE 0 END AS monotributo
     FROM horas_dibujantes h
     JOIN dibujantes d ON d.id = h.dibujante_id
-    WHERE ${condiciones.join(' AND ')}
+    WHERE ${f.condiciones.join(' AND ')}
     GROUP BY d.id, d.nombre, DATE_TRUNC('month', h.fecha),
              EXTRACT(MONTH FROM h.fecha), EXTRACT(YEAR FROM h.fecha)
     ORDER BY mes DESC, d.nombre ASC
-  `, params);
+  `, f.params);
   res.json(rows);
 });
 
@@ -120,17 +131,6 @@ router.get('/mis-liquidaciones', async (req, res) => {
 // Usan el mismo criterio de costo que el resto de la app (utils/costoHoras.js):
 // horas liquidadas a la tarifa de su liquidación + su parte del monotributo de esa
 // liquidación; horas sin liquidar a la tarifa actual del dibujante, sin monotributo.
-function filtrosExport(q) {
-  const { proyecto_id, dibujante_id, desde, hasta } = q;
-  const condiciones = ['TRUE'];
-  const params = [];
-  if (dibujante_id) { params.push(dibujante_id); condiciones.push(`h.dibujante_id = $${params.length}`); }
-  if (proyecto_id)  { params.push(proyecto_id);  condiciones.push(`h.proyecto_id = $${params.length}`); }
-  if (desde)        { params.push(desde);         condiciones.push(`h.fecha >= $${params.length}`); }
-  if (hasta)        { params.push(hasta);         condiciones.push(`h.fecha <= $${params.length}`); }
-  return { where: condiciones.join(' AND '), params };
-}
-
 // '2026-10-05' → '05/10/2026' (sin pasar por Date, para no correr el día por zona horaria)
 const fechaAR = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
 
@@ -143,7 +143,7 @@ function textoPeriodo(desde, hasta) {
 
 router.get('/exportar/excel', auth.soloAdmin, async (req, res) => {
   const ExcelJS = require('exceljs');
-  const { where, params } = filtrosExport(req.query);
+  const { where, params } = armarFiltros(req.query);
 
   const { rows } = await query(
     `SELECT to_char(h.fecha, 'YYYY-MM-DD') AS fecha, d.nombre AS dibujante, p.nombre AS proyecto,
@@ -218,27 +218,24 @@ router.get('/exportar/excel', auth.soloAdmin, async (req, res) => {
   res.end();
 });
 
+// Nombres de lo filtrado, para el encabezado del PDF
+async function textoSeleccion(tabla, ids, todos, singular, plural) {
+  if (!ids.length) return todos;
+  const { rows } = await query(`SELECT nombre FROM ${tabla} WHERE id::text = ANY($1) ORDER BY nombre`, [ids]);
+  const nombres = rows.map(r => r.nombre);
+  const titulo = nombres.length === 1 ? singular : plural;
+  return `${titulo}: ${nombres.join(', ')}`;
+}
+
+// PDF del resumen: el mismo que se ve en la pantalla "Por dibujante", con los mismos filtros
 router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   const PDFDocument = require('pdfkit');
-  const { where, params } = filtrosExport(req.query);
-
-  const { rows } = await query(
-    `SELECT d.id AS dibujante_id, d.nombre AS dibujante_nombre, d.tarifa_hora_base AS tarifa_actual,
-            p.id AS proyecto_id, p.nombre AS proyecto_nombre,
-            SUM(h.horas) AS horas_totales,
-            SUM(${costoTarifaSQL()}) AS costo_horas,
-            SUM(${monotributoSQL()}) AS monotributo,
-            SUM(${costoSQL()}) AS costo_total,
-            SUM(CASE WHEN ${liquidadaSQL()} THEN 0 ELSE h.horas END) AS horas_pendientes
-     FROM horas_dibujantes h
-     JOIN dibujantes d ON d.id = h.dibujante_id
-     JOIN proyectos  p ON p.id = h.proyecto_id
-     ${joinLiqSQL()}
-     WHERE ${where}
-     GROUP BY d.id, d.nombre, d.tarifa_hora_base, p.id, p.nombre
-     ORDER BY d.nombre, p.nombre`,
-    params
-  );
+  const f = armarFiltros(req.query);
+  const rows = await consultaResumen(f.where, f.params);
+  const [txtDibujantes, txtProyectos] = await Promise.all([
+    textoSeleccion('dibujantes', f.dibujantes, 'Todos los dibujantes', 'Dibujante', 'Dibujantes'),
+    textoSeleccion('proyectos', f.proyectos, 'Todos los proyectos', 'Proyecto', 'Proyectos'),
+  ]);
 
   const porDibujante = {};
   rows.forEach(r => {
@@ -258,9 +255,12 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   });
 
   const grupos = Object.values(porDibujante);
-  const horasTotalesGlobal = grupos.reduce((s, g) => s + g.horasTotal, 0);
-  const costoTotalGlobal   = grupos.reduce((s, g) => s + g.costoTotal, 0);
-  const hayPendientes      = grupos.some(g => g.horasPendientes > 0);
+  const suma = (k) => grupos.reduce((s, g) => s + g[k], 0);
+  const tot = {
+    horas: suma('horasTotal'), costoHoras: suma('costoHoras'), monotributo: suma('monotributo'),
+    costoTotal: suma('costoTotal'), proyectos: new Set(rows.map(r => r.proyecto_id)).size,
+  };
+  const hayPendientes = grupos.some(g => g.horasPendientes > 0);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="horas_por_dibujante.pdf"');
@@ -269,20 +269,44 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   doc.pipe(res);
 
   const moneyFmt = (n) => `$ ${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const horasFmt = (n) => `${Number(n).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h`;
   // Tarifa efectiva del renglón: si mezcla liquidaciones con distintas tarifas, es el promedio
   const tarifaEfectiva = (costo, horas) => (Number(horas) > 0 ? Number(costo) / Number(horas) : 0);
+  const anchoPagina = doc.page.width - 80;
 
-  doc.fontSize(16).fillColor('#1a2744').text('Horas trabajadas — VJV Arquitectos', { align: 'center' });
+  doc.fontSize(16).fillColor('#1a2744').text('Horas trabajadas — VJV Arquitectos', 40, 40, { width: anchoPagina, align: 'center' });
   doc.fontSize(9).fillColor('#666').text(
     `${textoPeriodo(req.query.desde, req.query.hasta)}  ·  Generado el ${new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba' })}`,
-    { align: 'center' }
+    { width: anchoPagina, align: 'center' }
   );
-  doc.moveDown(0.6);
-  doc.fontSize(10).fillColor('#1a2744');
-  doc.text(`Horas totales: ${horasTotalesGlobal.toFixed(1)} h     Costo total: ${moneyFmt(costoTotalGlobal)}     Dibujantes: ${grupos.length}`, { align: 'center' });
-  doc.moveDown(1);
+  doc.text(txtDibujantes, { width: anchoPagina, align: 'center' });
+  doc.text(txtProyectos, { width: anchoPagina, align: 'center' });
+  doc.moveDown(0.8);
 
-  const anchoPagina = doc.page.width - 80;
+  // Tarjetas de totales, como en la pantalla
+  const tarjetas = [
+    ['Horas totales', horasFmt(tot.horas)],
+    ['Costo horas', moneyFmt(tot.costoHoras)],
+    ['Monotributo', moneyFmt(tot.monotributo)],
+    ['Costo total', moneyFmt(tot.costoTotal)],
+  ];
+  const anchoT = (anchoPagina - 3 * 8) / 4;
+  const yT = doc.y;
+  tarjetas.forEach(([label, valor], i) => {
+    const x = 40 + i * (anchoT + 8);
+    doc.rect(x, yT, anchoT, 40).lineWidth(0.5).strokeColor('#dddddd').stroke();
+    doc.font('Helvetica').fontSize(7.5).fillColor('#666').text(label.toUpperCase(), x + 8, yT + 7, { width: anchoT - 16 });
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(i === 3 ? '#b71c1c' : '#1a2744').text(valor, x + 8, yT + 20, { width: anchoT - 16 });
+  });
+  doc.font('Helvetica').fontSize(8.5).fillColor('#666').text(
+    `${grupos.length} dibujante${grupos.length !== 1 ? 's' : ''} · ${tot.proyectos} proyecto${tot.proyectos !== 1 ? 's' : ''}`,
+    40, yT + 46, { width: anchoPagina, align: 'right' }
+  );
+  doc.y = yT + 66;
+
+  if (!grupos.length) {
+    doc.fontSize(10).fillColor('#666').text('No hay horas para los filtros elegidos.', 40, doc.y, { width: anchoPagina, align: 'center' });
+  }
 
   grupos.forEach(g => {
     if (doc.y > 680) doc.addPage();
@@ -294,7 +318,7 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
     doc.font('Helvetica').fontSize(9).fillColor('#666');
     doc.text(`Tarifa actual: ${moneyFmt(g.tarifaActual)}/h`, 270, yInicio + 8);
     doc.fontSize(10).fillColor('#1a1a1a');
-    doc.text(`${g.horasTotal.toFixed(1)} h totales`, 400, yInicio + 7, { width: 80, align: 'right' });
+    doc.text(horasFmt(g.horasTotal), 400, yInicio + 7, { width: 80, align: 'right' });
     doc.fillColor('#b71c1c').font('Helvetica-Bold');
     doc.text(moneyFmt(g.costoTotal), 480, yInicio + 7, { width: 95, align: 'right' });
     doc.font('Helvetica');
@@ -307,7 +331,7 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
       doc.fillColor('#666').fontSize(9);
       const marca = Number(p.horas_pendientes) > 0 ? ' *' : '';
       doc.text(`${p.proyecto_nombre}${marca}`, 48, y + 3, { width: 220 });
-      doc.text(`${Number(p.horas_totales).toFixed(1)} h`, 270, y + 3, { width: 60 });
+      doc.text(horasFmt(p.horas_totales), 270, y + 3, { width: 60 });
       doc.fillColor('#999').font('Helvetica-Oblique');
       doc.text(`× ${moneyFmt(tarifaEfectiva(p.costo_horas, p.horas_totales))}/h`, 340, y + 3, { width: 130 });
       doc.font('Helvetica').fillColor('#1a1a1a');
@@ -315,7 +339,7 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
       y += 16;
     });
 
-    // Monotributo: la parte que corresponde a las horas liquidadas del período filtrado
+    // Monotributo: la parte que corresponde a las horas liquidadas de lo filtrado
     if (g.monotributo > 0) {
       if (y > 750) { doc.addPage(); y = 40; }
       doc.rect(40, y, anchoPagina, 16).fill('#f0f4ff');
@@ -329,6 +353,19 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
 
     doc.y = y + 10;
   });
+
+  // Total general de lo filtrado
+  if (grupos.length) {
+    if (doc.y > 740) doc.addPage();
+    const yTot = doc.y;
+    doc.rect(40, yTot, anchoPagina, 26).fill('#1a2744');
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(11);
+    doc.text('TOTAL', 48, yTot + 8, { width: 200 });
+    doc.text(horasFmt(tot.horas), 400, yTot + 8, { width: 80, align: 'right' });
+    doc.text(moneyFmt(tot.costoTotal), 480, yTot + 8, { width: 95, align: 'right' });
+    doc.font('Helvetica');
+    doc.y = yTot + 36;
+  }
 
   if (hayPendientes) {
     if (doc.y > 760) doc.addPage();
