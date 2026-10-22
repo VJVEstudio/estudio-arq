@@ -109,13 +109,14 @@ export default function LiquidacionesDibujantes({ filtros }) {
     setCargando(true); setError('');
     try {
       const p = new URLSearchParams();
-      if (filtros.dibujante_id) p.set('dibujante_id', filtros.dibujante_id);
+      if (filtros.dibujante_ids) p.set('dibujante_ids', filtros.dibujante_ids);
+      else if (filtros.dibujante_id) p.set('dibujante_id', filtros.dibujante_id);
       if (filtros.desde) p.set('desde', filtros.desde);
       if (filtros.hasta) p.set('hasta', filtros.hasta);
       setLista(await get(`/liquidaciones?${p}`));
     } catch (err) { setError(err.message); }
     finally { setCargando(false); }
-  }, [filtros.dibujante_id, filtros.desde, filtros.hasta]);
+  }, [filtros.dibujante_ids, filtros.dibujante_id, filtros.desde, filtros.hasta]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const visibles = soloAlertas ? lista.filter(l => l.alertas.length) : lista;

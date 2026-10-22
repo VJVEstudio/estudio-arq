@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { get, post, getAccessToken } from '../../lib/api';
 import LiquidacionesDibujantes from './LiquidacionesDibujantes';
+import SelectorProyectos from '../../components/SelectorProyectos';
+import SelectorDibujantes from '../../components/SelectorDibujantes';
 import {
   EncabezadoSeccion, Tabla, Fila, Celda,
   Select, Input, AlertaError, Boton, Modal, Campo,
@@ -23,24 +25,52 @@ const MESES = [
   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'
 ];
 
+// Totales de todo lo que está filtrado (lo mismo que suma el PDF)
+function totalesResumen(resumen) {
+  const suma = (k) => resumen.reduce((s, r) => s + Number(r[k] || 0), 0);
+  return {
+    horas: suma('horas_totales'), costoHoras: suma('costo_horas'),
+    monotributo: suma('monotributo'), costoTotal: suma('costo_total'),
+    horasPendientes: suma('horas_pendientes'),
+    dibujantes: new Set(resumen.map(r => r.dibujante_id)).size,
+    proyectos: new Set(resumen.map(r => r.proyecto_id)).size,
+  };
+}
+
 function TarjetasHoras({ resumen }) {
-  const totHoras = resumen.reduce((s, r) => s + Number(r.horas_totales), 0);
-  const totCosto = resumen.reduce((s, r) => s + Number(r.costo_total), 0);
-  const dibujantesUnicos = [...new Set(resumen.map(r => r.dibujante_id))].length;
-  const proyectosUnicos  = [...new Set(resumen.map(r => r.proyecto_id))].length;
+  const t = totalesResumen(resumen);
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', marginBottom: '24px' }}>
       {[
-        { label: 'Horas totales', valor: `${totHoras.toFixed(1)} h`, color: AZUL },
-        { label: 'Costo total',   valor: fmt(totCosto),              color: '#b71c1c' },
-        { label: 'Dibujantes',    valor: dibujantesUnicos,           color: '#0d47a1' },
-        { label: 'Proyectos',     valor: proyectosUnicos,            color: '#1b5e20' },
-      ].map(t => (
-        <div key={t.label} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 20px' }}>
-          <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t.label}</p>
-          <p style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: t.color }}>{t.valor}</p>
+        { label: 'Horas totales', valor: `${t.horas.toFixed(1)} h`, color: AZUL },
+        { label: 'Costo horas',   valor: fmt(t.costoHoras),         color: '#1a1a1a' },
+        { label: 'Monotributo',   valor: fmt(t.monotributo),        color: '#0d47a1' },
+        { label: 'Costo total',   valor: fmt(t.costoTotal),         color: '#b71c1c' },
+        { label: 'Dibujantes',    valor: t.dibujantes,              color: '#0d47a1' },
+        { label: 'Proyectos',     valor: t.proyectos,               color: '#1b5e20' },
+      ].map(c => (
+        <div key={c.label} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', padding: '16px 20px' }}>
+          <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.label}</p>
+          <p style={{ margin: 0, fontSize: '20px', fontWeight: 600, color: c.color }}>{c.valor}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+const tarifaEfectiva = (costo, horas) => (Number(horas) > 0 ? Number(costo) / Number(horas) : 0);
+
+function BarraTotal({ horas, costo, etiqueta = 'Total de lo filtrado' }) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px',
+      background: AZUL, color: '#fff', borderRadius: '10px', padding: '12px 16px', fontSize: '15px',
+    }}>
+      <span style={{ fontWeight: 600 }}>{etiqueta}</span>
+      <span style={{ display: 'flex', gap: '24px' }}>
+        <span><strong>{Number(horas).toFixed(1)}</strong> h</span>
+        <strong>{fmt(costo)}</strong>
+      </span>
     </div>
   );
 }
@@ -52,45 +82,48 @@ function TablaResumen({ resumen }) {
     </p>
   );
   const porDibujante = {};
-    resumen.forEach(r => {
+  resumen.forEach(r => {
     if (!porDibujante[r.dibujante_id]) {
-      porDibujante[r.dibujante_id] = { nombre: r.dibujante_nombre, tarifa_actual: r.tarifa_actual, monotributo: r.monotributo, proyectos: [], horas_total: 0, costo_total: 0 };
+      porDibujante[r.dibujante_id] = { nombre: r.dibujante_nombre, tarifa_actual: r.tarifa_actual, proyectos: [], horas: 0, monotributo: 0, costo: 0 };
     }
-    porDibujante[r.dibujante_id].proyectos.push(r);
-    porDibujante[r.dibujante_id].horas_total += Number(r.horas_totales);
-    porDibujante[r.dibujante_id].costo_total += Number(r.costo_total);
+    const d = porDibujante[r.dibujante_id];
+    d.proyectos.push(r);
+    d.horas += Number(r.horas_totales);
+    d.monotributo += Number(r.monotributo || 0);
+    d.costo += Number(r.costo_total);
   });
+  const t = totalesResumen(resumen);
   return (
     <div style={{ marginBottom: '28px' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {Object.values(porDibujante).map(d => (
-          <div key={d.nombre} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
+        {Object.entries(porDibujante).map(([id, d]) => (
+          <div key={id} style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '10px', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '12px 16px', background: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
               <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
                 <span style={{ fontWeight: 500 }}>{d.nombre}</span>
                 <span style={{ fontSize: '12px', color: '#666' }}>Tarifa actual: {fmt(d.tarifa_actual)}/h</span>
               </div>
               <div style={{ display: 'flex', gap: '24px', fontSize: '14px' }}>
-                <span><strong>{d.horas_total.toFixed(1)}</strong> h totales</span>
-                {Number(d.monotributo) > 0 && <span style={{ fontSize: '12px', color: '#0d47a1' }}>+ Mono: {fmt(d.monotributo)}</span>}
-                <span style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(Number(d.costo_total) + Number(d.monotributo || 0))}</span>
+                <span><strong>{d.horas.toFixed(1)}</strong> h totales</span>
+                <span style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(d.costo)}</span>
               </div>
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <tbody>
                 {d.proyectos.map(p => (
                   <tr key={p.proyecto_id} style={{ borderBottom: '1px solid #e0e0e0' }}>
-                    <td style={{ padding: '8px 16px', color: '#666' }}>{p.proyecto_nombre}</td>
+                    <td style={{ padding: '8px 16px', color: '#666' }}>
+                      {p.proyecto_nombre}{Number(p.horas_pendientes) > 0 && <span title="Incluye horas sin liquidar (estimado)" style={{ color: '#f57f17' }}> *</span>}
+                    </td>
                     <td style={{ padding: '8px 16px' }}>{Number(p.horas_totales).toFixed(1)} h</td>
-                    <td style={{ padding: '8px 16px', fontFamily: 'monospace', fontSize: '12px', color: '#999' }}>× {fmt(p.tarifa_actual)}/h</td>
-                    <td style={{ padding: '8px 16px', textAlign: 'right', fontWeight: 500 }}>{fmt(p.costo_total)}</td>
+                    <td style={{ padding: '8px 16px', fontFamily: 'monospace', fontSize: '12px', color: '#999' }}>× {fmt(tarifaEfectiva(p.costo_horas, p.horas_totales))}/h</td>
+                    <td style={{ padding: '8px 16px', textAlign: 'right', fontWeight: 500 }}>{fmt(p.costo_horas)}</td>
                   </tr>
                 ))}
-                {Number(d.monotributo || 0) > 0 && (
+                {d.monotributo > 0 && (
                   <tr style={{ borderBottom: '1px solid #e0e0e0', background: '#f0f4ff' }}>
                     <td style={{ padding: '8px 16px', color: '#0d47a1', fontWeight: 500 }}>Monotributo</td>
-                    <td style={{ padding: '8px 16px', color: '#999', fontSize: '12px' }}>mensual</td>
-                    <td style={{ padding: '8px 16px' }}></td>
+                    <td colSpan={2} style={{ padding: '8px 16px', color: '#666', fontSize: '12px' }}>parte de las liquidaciones</td>
                     <td style={{ padding: '8px 16px', textAlign: 'right', fontWeight: 600, color: '#0d47a1' }}>{fmt(d.monotributo)}</td>
                   </tr>
                 )}
@@ -98,6 +131,12 @@ function TablaResumen({ resumen }) {
             </table>
           </div>
         ))}
+        <BarraTotal horas={t.horas} costo={t.costoTotal} />
+        {t.horasPendientes > 0 && (
+          <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+            <span style={{ color: '#f57f17' }}>*</span> Incluye horas sin liquidar, valuadas a la tarifa actual del dibujante y sin monotributo (estimado hasta que se liquiden).
+          </p>
+        )}
       </div>
     </div>
   );
@@ -254,18 +293,26 @@ export default function Horas() {
   const [mesSeleccionado, setMesSeleccionado] = useState(
     `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
   );
-  const [filtros, setFiltros] = useState({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' });
+  const [filtros, setFiltros] = useState({ desde: '', hasta: '' });
+  // Varios dibujantes y proyectos a la vez (Set vacío = todos), como en Movimientos
+  const [dibujantesSel, setDibujantesSel] = useState(() => new Set());
+  const [proyectosSel, setProyectosSel] = useState(() => new Set());
   const [vista, setVista] = useState('resumen');
 
   const filtrosEfectivos = (() => {
+    const base = {
+      ...filtros,
+      dibujante_ids: [...dibujantesSel].join(','),
+      proyecto_ids: [...proyectosSel].join(','),
+    };
     if (modoFecha === 'mes' && mesSeleccionado) {
       const [anio, mes] = mesSeleccionado.split('-').map(Number);
       const desde = `${anio}-${String(mes).padStart(2, '0')}-01`;
       const ultimoDia = new Date(anio, mes, 0).getDate();
-      const hasta = `${anio}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
-      return { ...filtros, desde, hasta };
+      const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+      return { ...base, desde, hasta };
     }
-    return filtros;
+    return base;
   })();
 
   const cargar = useCallback(async () => {
@@ -274,8 +321,9 @@ export default function Horas() {
     try {
       const params = new URLSearchParams();
       Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) params.set(k, v); });
-      const pendientesParams = new URLSearchParams();
-      Object.entries(filtrosEfectivos).forEach(([k, v]) => { if (v) pendientesParams.set(k, v); });
+      // La liquidación es por dibujante y mes completo: pendientes no se filtra por proyecto
+      const pendientesParams = new URLSearchParams(params);
+      pendientesParams.delete('proyecto_ids');
       const [h, r, d, p, s, dest, pend] = await Promise.all([
         get(`/horas?${params}`),
         get(`/horas/resumen?${params}`),
@@ -302,7 +350,9 @@ export default function Horas() {
   const setF = (k) => (e) => setFiltros(p => ({ ...p, [k]: e.target.value }));
 
   const limpiarFiltros = () => {
-    setFiltros({ dibujante_id: '', proyecto_id: '', desde: '', hasta: '' });
+    setFiltros({ desde: '', hasta: '' });
+    setDibujantesSel(new Set());
+    setProyectosSel(new Set());
     setModoFecha('rango');
   };
 
@@ -314,7 +364,11 @@ export default function Horas() {
     window.open(`${BASE}/horas/exportar/${formato}?${params}`, '_blank');
   };
 
-  const hayFiltrosActivos = filtros.dibujante_id || filtros.proyecto_id || filtros.desde || filtros.hasta || modoFecha === 'mes';
+  const hayFiltrosActivos = dibujantesSel.size > 0 || proyectosSel.size > 0 || filtros.desde || filtros.hasta || modoFecha === 'mes';
+  const totDetalle = {
+    horas: horas.reduce((s, h) => s + Number(h.horas || 0), 0),
+    costo: horas.reduce((s, h) => s + Number(h.costo_total || 0), 0),
+  };
 
   return (
     <div style={{ padding: '32px', maxWidth: '1200px' }}>
@@ -331,14 +385,8 @@ export default function Horas() {
       <TarjetasHoras resumen={resumen} />
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <Select value={filtros.dibujante_id} onChange={setF('dibujante_id')} style={{ width: 'auto' }}>
-          <option value="">Todos los dibujantes</option>
-          {dibujantes.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-        </Select>
-        <Select value={filtros.proyecto_id} onChange={setF('proyecto_id')} style={{ width: 'auto' }}>
-          <option value="">Todos los proyectos</option>
-          {proyectos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-        </Select>
+        <SelectorDibujantes dibujantes={dibujantes} seleccion={dibujantesSel} onCambiar={setDibujantesSel} />
+        <SelectorProyectos proyectos={proyectos} seleccion={proyectosSel} onCambiar={setProyectosSel} incluirSinProyecto={false} />
 
         <div style={{ display: 'flex', gap: '4px', background: '#f0f0f0', borderRadius: '8px', padding: '3px' }}>
           {[{ id: 'rango', label: 'Fecha exacta' }, { id: 'mes', label: 'Por mes' }].map(opt => (
@@ -400,7 +448,7 @@ export default function Horas() {
       ) : (
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
-            columnas={['Fecha', 'Dibujante', 'Proyecto', 'Horas', 'Tarifa aplicada', 'Costo', 'Estado', 'Descripción']}
+            columnas={['Fecha', 'Dibujante', 'Proyecto', 'Horas', 'Tarifa', 'Costo', 'Estado', 'Descripción']}
             ordenable={[
               { campo: 'fecha', tipo: 'fecha' },
               { campo: 'dibujante_nombre', tipo: 'texto' },
@@ -420,7 +468,12 @@ export default function Horas() {
                 <Celda style={{ color: '#666', fontSize: '13px' }}>{h.proyecto_nombre}</Celda>
                 <Celda align="center" style={{ fontWeight: 600, color: AZUL }}>{Number(h.horas).toFixed(1)} h</Celda>
                 <Celda style={{ fontFamily: 'monospace', fontSize: '12px', color: '#999' }}>{fmt(h.tarifa_aplicada)}/h</Celda>
-                <Celda style={{ fontWeight: 600, color: '#b71c1c' }}>{fmt(h.costo_total)}</Celda>
+                <Celda style={{ fontWeight: 600, color: '#b71c1c', whiteSpace: 'nowrap' }}>
+                  {fmt(h.costo_total)}
+                  {Number(h.monotributo) > 0 && (
+                    <span style={{ display: 'block', fontWeight: 400, fontSize: '11px', color: '#0d47a1' }}>incl. mono {fmt(h.monotributo)}</span>
+                  )}
+                </Celda>
                 <Celda>
                   <span style={{
                     display: 'inline-block', padding: '2px 10px', borderRadius: '20px',
@@ -439,6 +492,12 @@ export default function Horas() {
               </Fila>
             )}
           />
+          {horas.length > 0 && (
+            <div style={{ padding: '12px' }}>
+              <BarraTotal horas={totDetalle.horas} costo={totDetalle.costo}
+                etiqueta={`Total de lo filtrado (${horas.length} registro${horas.length !== 1 ? 's' : ''})`} />
+            </div>
+          )}
         </div>
       )}
     </div>

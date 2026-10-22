@@ -39,10 +39,12 @@ async function tablasBancoExisten() {
 // ── Listado ──────────────────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
   try {
-    const { dibujante_id, desde, hasta } = req.query;
+    const { dibujante_id, dibujante_ids, desde, hasta } = req.query;
     const params = [];
     const cond = ['TRUE'];
-    if (dibujante_id) { params.push(dibujante_id); cond.push(`l.dibujante_id = $${params.length}`); }
+    // Uno o varios dibujantes (dibujante_ids separados por coma)
+    const dibs = [dibujante_ids, dibujante_id].filter(Boolean).join(',').split(',').map(v => v.trim()).filter(Boolean);
+    if (dibs.length) { params.push(dibs); cond.push(`l.dibujante_id::text = ANY($${params.length})`); }
     // Período de la liquidación (mes/año) dentro del rango pedido
     if (desde) { params.push(desde); cond.push(`make_date(l.anio, l.mes, 1) >= date_trunc('month', $${params.length}::date)`); }
     if (hasta) { params.push(hasta); cond.push(`make_date(l.anio, l.mes, 1) <= $${params.length}::date`); }
