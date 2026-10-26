@@ -13,8 +13,28 @@ router.use(auth.verificar);
 
 const ETAPAS = ['Master plan', 'Anteproyecto', 'Proyecto', 'Proyecto ejecutivo', 'Gestiones administrativas', 'Licitación', 'Obra'];
 const ROLES = ['Project manager', 'Senior PM', 'Dibujante', 'Colaborador'];
-const TIPOS_ARCHIVO = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 6 } });
+// Archivos que se pueden adjuntar en el grupo. Se valida por extensión porque Word,
+// Excel y sobre todo DWG llegan con tipos MIME distintos según la computadora.
+const EXTENSIONES = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  dwg: 'image/vnd.dwg',
+};
+const MAX_MB = 25;
+const extension = (nombre) => String(nombre || '').split('.').pop().toLowerCase();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_MB * 1024 * 1024, files: 6 } });
+// Recibe los archivos y, si algo no entra (tamaño, cantidad), contesta con un mensaje claro
+const recibirArchivos = (req, res, next) => upload.array('archivos', 6)(req, res, (err) => {
+  if (!err) return next();
+  const msg = err.code === 'LIMIT_FILE_SIZE' ? `Cada archivo puede pesar hasta ${MAX_MB} MB`
+    : (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') ? 'Se pueden adjuntar hasta 6 archivos por mensaje'
+    : 'No se pudo recibir el archivo';
+  res.status(400).json({ error: msg });
+});
 
 // Express 4 no captura errores de funciones async: los pasa al manejador de errores
 const envolver = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
@@ -383,7 +403,7 @@ router.put('/proyectos/:id/equipo', envolver(async (req, res) => {
 // ── Mensajes ───────────────────────────────────────────────────────────────────
 const nombreSeguro = (n) => String(n || 'archivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_').slice(-80);
 
-router.post('/proyectos/:id/mensajes', upload.array('archivos', 6), envolver(async (req, res) => {
+router.post('/proyectos/:id/mensajes', recibirArchivos, envolver(async (req, res) => {
   const pid = req.params.id;
   const texto = (req.body.texto || '').trim();
   const decision = req.body.decision === 'true' || req.body.decision === true;
@@ -395,14 +415,21 @@ router.post('/proyectos/:id/mensajes', upload.array('archivos', 6), envolver(asy
   // multer entrega el nombre original en latin1: se pasa a UTF-8 para no romper los acentos
   const archivos = (req.files || []).map(a => ({ ...a, originalname: Buffer.from(a.originalname, 'latin1').toString('utf8') }));
   if (!texto && !archivos.length) return res.status(400).json({ error: 'El mensaje está vacío' });
-  if (archivos.some(a => !TIPOS_ARCHIVO.includes(a.mimetype))) {
-    return res.status(400).json({ error: 'Solo se pueden adjuntar imágenes (JPG, PNG, WEBP, GIF) o PDF' });
+  const noPermitido = archivos.find(a => !EXTENSIONES[extension(a.originalname)]);
+  if (noPermitido) {
+    return res.status(400).json({ error: `«${noPermitido.originalname}»: solo se pueden adjuntar fotos (JPG, PNG, WEBP, GIF), PDF, Word, Excel o DWG` });
   }
   // Primero se suben los archivos; si falla, no queda un mensaje a medias
   const subidos = [];
   for (const a of archivos) {
-    const url = await subirArchivo(a.buffer, nombreSeguro(a.originalname), a.mimetype, `seguimiento/${pid}`);
-    subidos.push({ url, nombre: a.originalname, tipo: a.mimetype });
+    const tipo = EXTENSIONES[extension(a.originalname)];
+    try {
+      const url = await subirArchivo(a.buffer, nombreSeguro(a.originalname), tipo, `seguimiento/${pid}`);
+      subidos.push({ url, nombre: a.originalname, tipo });
+    } catch (err) {
+      console.error('Error subiendo archivo de seguimiento:', a.originalname, err.message);
+      return res.status(502).json({ error: `No se pudo subir «${a.originalname}» al almacenamiento. Probá de nuevo o avisá si sigue pasando.` });
+    }
   }
   const client = await pool.connect();
   try {
