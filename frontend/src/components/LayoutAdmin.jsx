@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { CampanaNotificaciones } from '../pages/seguimiento/comunes';
 
 const AZUL = '#6b6b6b';
 
@@ -10,6 +11,7 @@ const NAV = [
   ]},
   { grupo: 'Gestión', items: [
     { to: '/admin/clientes-proyectos', label: 'Clientes y Proyectos', icono: '📐' },
+    { to: '/admin/seguimiento', label: 'Seguimiento', icono: '💬' },
   ]},
 { grupo: 'Finanzas', items: [
     { to: '/admin/movimientos', label: 'Movimientos', icono: '↕' },
@@ -110,9 +112,10 @@ function Header({ usuario, onLogout }) {
   return (
     <header style={{
       height: 56, background: '#fff', borderBottom: '1px solid #e0e0e0',
-      display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px',
       padding: '0 24px', position: 'sticky', top: 0, zIndex: 90,
     }}>
+      <CampanaNotificaciones base="/admin/seguimiento" />
       <div style={{ position: 'relative' }}>
         <button onClick={() => setMenuAbierto(v => !v)} style={{
           display: 'flex', alignItems: 'center', gap: '10px',

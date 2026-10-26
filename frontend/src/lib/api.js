@@ -29,14 +29,16 @@ async function renovarToken() {
 
 export async function api(endpoint, opts = {}) {
   const hacerPeticion = async (token) => {
+    // Con FormData (archivos) el navegador arma el Content-Type; no se convierte a JSON
+    const esForm = typeof FormData !== 'undefined' && opts.body instanceof FormData;
     const headers = {
-      'Content-Type': 'application/json',
+      ...(esForm ? {} : { 'Content-Type': 'application/json' }),
       ...(opts.headers || {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
     return fetch(`${BASE_URL}${endpoint}`, {
       ...opts, credentials: 'include', headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      body: opts.body ? (esForm ? opts.body : JSON.stringify(opts.body)) : undefined,
     });
   };
 
@@ -68,3 +70,5 @@ export const post  = (url, body) => api(url, { method: 'POST',  body });
 export const put   = (url, body) => api(url, { method: 'PUT',   body });
 export const patch = (url, body) => api(url, { method: 'PATCH', body });
 export const del   = (url)       => api(url, { method: 'DELETE' });
+// Envía un FormData (por ejemplo, un mensaje con fotos)
+export const enviarForm = (url, formData) => api(url, { method: 'POST', body: formData });
