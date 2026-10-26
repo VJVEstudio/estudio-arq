@@ -46,6 +46,9 @@ export default function Seguimiento({ base }) {
           </p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+          <button type="button" onClick={() => navigate(`${base}/revision`)} style={{
+            font: 'inherit', fontSize: 13, fontWeight: 500, padding: '6px 12px', border: 'none', borderRadius: 8, background: AZUL, color: '#fff', cursor: 'pointer',
+          }}>Reunión de revisión</button>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={finalizados} onChange={e => setFinalizados(e.target.checked)} />
             Ver finalizados

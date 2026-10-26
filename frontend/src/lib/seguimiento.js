@@ -21,6 +21,7 @@ export const TIPOS_HIST = {
   etapa:    { t: 'Etapa',    bg: '#efe9f6', fg: '#4b2a78' },
   equipo:   { t: 'Equipo',   bg: '#ececec', fg: '#333333' },
   mensaje:  { t: 'Mensaje',  bg: '#fbe9e7', fg: '#8a2c1a' },
+  datos:    { t: 'Datos',    bg: '#eef3f1', fg: '#2f5a4c' },
 };
 
 export const RE_MENCION = /@([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)/g;
