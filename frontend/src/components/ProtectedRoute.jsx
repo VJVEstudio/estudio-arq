@@ -1,8 +1,9 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProtectedRoute({ rol }) {
   const { usuario, cargando } = useAuth();
+  const location = useLocation();
 
   if (cargando) {
     return (
@@ -16,7 +17,8 @@ export default function ProtectedRoute({ rol }) {
   }
 
   if (!usuario) {
-    return <Navigate to="/login" replace />;
+    // Se recuerda adónde quería ir, para volver ahí después de ingresar
+    return <Navigate to="/login" replace state={{ desde: location.pathname + location.search }} />;
   }
 
   if (rol && usuario.rol !== rol) {

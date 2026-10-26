@@ -6,6 +6,19 @@ const auth    = require('../middleware/auth');
 
 const router = express.Router();
 
+// Cookie de la sesión (refresh token). La app (Vercel) y el servidor (Render) están en
+// dominios distintos: para que el navegador la mande al recargar la página tiene que ser
+// SameSite=None + Secure. Antes, al renovarse quedaba en 'strict' y el siguiente F5 no la
+// encontraba, así que la app volvía a la pantalla de ingreso. En desarrollo (sin https), 'lax'.
+const enProduccion = () => process.env.NODE_ENV === 'production';
+const opcionesCookie = () => ({
+  httpOnly: true,
+  secure:   enProduccion(),
+  sameSite: enProduccion() ? 'none' : 'lax',
+  path:     '/',
+});
+const DURACION_COOKIE = 7 * 24 * 60 * 60 * 1000;
+
 function generarAccessToken(usuario) {
   return jwt.sign(
     { id: usuario.id, email: usuario.email, rol: usuario.rol, nombre: usuario.nombre },
@@ -18,7 +31,8 @@ function generarRefreshToken(usuario) {
   return jwt.sign(
     { id: usuario.id },
     process.env.JWT_REFRESH_SECRET,
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+    // jwtid al azar: dos renovaciones en el mismo segundo no dan el mismo token
+    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d', jwtid: require('crypto').randomUUID() }
   );
 }
 
@@ -55,12 +69,7 @@ router.post('/login', async (req, res) => {
        VALUES ($1, $2, NOW() + INTERVAL '7 days')`,
       [usuario.id, refreshToken]
     );
-    res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure:   process.env.NODE_ENV === 'production',
-sameSite: 'none',
-      maxAge:   7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('refresh_token', refreshToken, { ...opcionesCookie(), maxAge: DURACION_COOKIE });
     return res.json({
       accessToken,
       usuario: {
@@ -91,22 +100,21 @@ router.post('/refresh', async (req, res) => {
       [refreshToken]
     );
     if (!rows[0]) return res.status(401).json({ error: 'Refresh token inválido o expirado' });
-    const usuario = rows[0];
-    if (!usuario.activo) return res.status(403).json({ error: 'Usuario desactivado' });
+    const fila = rows[0];
+    if (!fila.activo) return res.status(403).json({ error: 'Usuario desactivado' });
+    // Ojo: rt.id es el id de la fila de refresh_tokens; el usuario es uid.
+    // Antes se armaba la sesión con rt.id y, después de renovar, la app no reconocía
+    // al usuario (o lo podía confundir con otro).
+    const usuario = { id: fila.uid, nombre: fila.nombre, email: fila.email, rol: fila.rol };
     const nuevoRefreshToken = generarRefreshToken(usuario);
     const nuevoAccessToken  = generarAccessToken(usuario);
     await query(`UPDATE refresh_tokens SET revocado = TRUE WHERE token = $1`, [refreshToken]);
     await query(
       `INSERT INTO refresh_tokens (usuario_id, token, expires_at)
        VALUES ($1, $2, NOW() + INTERVAL '7 days')`,
-      [usuario.uid, nuevoRefreshToken]
+      [usuario.id, nuevoRefreshToken]
     );
-    res.cookie('refresh_token', nuevoRefreshToken, {
-      httpOnly: true,
-      secure:   process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge:   7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('refresh_token', nuevoRefreshToken, { ...opcionesCookie(), maxAge: DURACION_COOKIE });
     return res.json({ accessToken: nuevoAccessToken });
   } catch (err) {
     if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
@@ -124,7 +132,7 @@ router.post('/logout', async (req, res) => {
       await query(`UPDATE refresh_tokens SET revocado = TRUE WHERE token = $1`, [refreshToken]);
     } catch (_) {}
   }
-  res.clearCookie('refresh_token');
+  res.clearCookie('refresh_token', opcionesCookie());
   return res.json({ mensaje: 'Sesión cerrada' });
 });
 

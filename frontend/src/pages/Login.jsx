@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const AZUL = '#6b6b6b';
@@ -7,6 +7,7 @@ const AZUL = '#6b6b6b';
 export default function Login() {
   const { login } = useAuth();
   const navigate  = useNavigate();
+  const location  = useLocation();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
@@ -18,7 +19,10 @@ export default function Login() {
     setCargando(true);
     try {
       const usuario = await login(email, password);
-      navigate(usuario.rol === 'admin' ? '/admin' : '/dibujante', { replace: true });
+      // Vuelve a la pantalla donde estaba (si corresponde a su perfil); si no, al inicio
+      const inicio = usuario.rol === 'admin' ? '/admin' : '/dibujante';
+      const desde = location.state?.desde;
+      navigate(desde && desde.startsWith(inicio) ? desde : inicio, { replace: true });
     } catch (err) {
       setError(err.message || 'No se pudo iniciar sesión');
     } finally {
