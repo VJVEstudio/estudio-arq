@@ -4,6 +4,7 @@ import { get, post, put, patch, del, enviarForm } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import {
   ETAPAS, ROLES, ORDEN_ROL, RESP_ROL, TIPOS_HIST, primerNombre, diaDe, horaDe, cuando, fmtFecha, hoyISO, segmentar,
+  MAX_MB_ARCHIVO, EXTENSIONES_PERMITIDAS, ACCEPT_ARCHIVOS, extensionDe, tipoArchivo,
 } from '../../lib/seguimiento';
 import { Avatar, AZUL, ComentariosTarea, BotonComentarios, LinkDrive } from './comunes';
 import { AlertaError } from '../../components/ui';
@@ -26,6 +27,35 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
   const [draft, setDraft] = useState('');
   const [decision, setDecision] = useState(false);
   const [archivos, setArchivos] = useState([]);
+  const [arrastrando, setArrastrando] = useState(false);
+  const contadorArrastre = useRef(0);
+
+  // Suma archivos (desde el botón o arrastrados) y avisa los que no se aceptan
+  const agregarArchivos = (lista) => {
+    const nuevos = Array.from(lista || []);
+    const malos = nuevos.filter(f => !EXTENSIONES_PERMITIDAS.includes(extensionDe(f.name)));
+    const pesados = nuevos.filter(f => f.size > MAX_MB_ARCHIVO * 1024 * 1024);
+    const buenos = nuevos.filter(f => !malos.includes(f) && !pesados.includes(f));
+    const avisos = [];
+    if (malos.length) avisos.push(`No se puede adjuntar ${malos.map(f => f.name).join(', ')}: solo fotos, PDF, Word, Excel o DWG.`);
+    if (pesados.length) avisos.push(`${pesados.map(f => f.name).join(', ')} pesa${pesados.length > 1 ? 'n' : ''} más de ${MAX_MB_ARCHIVO} MB.`);
+    const todos = [...archivos, ...buenos];
+    if (todos.length > 6) avisos.push('Se pueden adjuntar hasta 6 archivos por mensaje.');
+    setArchivos(todos.slice(0, 6));
+    if (avisos.length) onError(avisos.join(' '));
+  };
+  const hayArchivos = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+  const arrastre = {
+    onDragEnter: (e) => { if (!hayArchivos(e)) return; e.preventDefault(); contadorArrastre.current += 1; setArrastrando(true); },
+    onDragOver: (e) => { if (!hayArchivos(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; },
+    onDragLeave: (e) => { if (!hayArchivos(e)) return; contadorArrastre.current -= 1; if (contadorArrastre.current <= 0) setArrastrando(false); },
+    onDrop: (e) => {
+      if (!hayArchivos(e)) return;
+      e.preventDefault(); contadorArrastre.current = 0; setArrastrando(false);
+      agregarArchivos(e.dataTransfer.files);
+      textoRef.current?.focus();
+    },
+  };
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(null); // { id, texto }
   const chatRef = useRef(null);
@@ -95,7 +125,17 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
   let diaAnt = null;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
-      <section aria-label="Conversación del grupo" style={{ ...caja, flex: '999 1 520px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <section aria-label="Conversación del grupo" {...arrastre}
+        style={{ ...caja, flex: '999 1 520px', minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        {arrastrando && (
+          <div aria-hidden="true" style={{
+            position: 'absolute', inset: 6, zIndex: 5, borderRadius: 8, border: `2px dashed ${AZUL}`, background: 'rgba(238,242,248,0.92)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, pointerEvents: 'none', color: AZUL,
+          }}>
+            <strong style={{ fontSize: 16 }}>Soltá los archivos acá</strong>
+            <span style={{ fontSize: 12 }}>Fotos, PDF, Word, Excel o DWG · hasta {MAX_MB_ARCHIVO} MB cada uno</span>
+          </div>
+        )}
         <div ref={chatRef} style={{ height: 'calc(100vh - 290px)', minHeight: 380, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 7, fontSize: 13 }}>
           {!datos.mensajes.length && (
             <p style={{ margin: 'auto', color: '#6b6b6b', textAlign: 'center' }}>Todavía no hay mensajes. Escribí el primero para el grupo.</p>
@@ -177,14 +217,15 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
                     )}
                     {m.archivos?.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
-                        {m.archivos.map(a => a.tipo?.startsWith('image/') ? (
+                        {m.archivos.map(a => tipoArchivo(a.nombre, a.tipo).clase === 'imagen' ? (
                           <a key={a.id} href={a.url} target="_blank" rel="noreferrer" title={`Abrir ${a.nombre}`}>
                             <img src={a.url} alt={a.nombre} loading="lazy" style={{ display: 'block', width: 150, height: 98, objectFit: 'cover', borderRadius: 6, border: '1px solid #e0e0e0' }} />
                           </a>
                         ) : (
-                          <a key={a.id} href={a.url} target="_blank" rel="noreferrer"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '5px 9px', border: '1px solid #d6d9df', borderRadius: 6, background: '#fff', color: AZUL, textDecoration: 'none' }}>
-                            PDF · {a.nombre}
+                          <a key={a.id} href={a.url} target="_blank" rel="noreferrer" title={`Abrir o descargar ${a.nombre}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '4px 9px 4px 4px', border: '1px solid #d6d9df', borderRadius: 6, background: '#fff', color: '#1a1a1a', textDecoration: 'none', maxWidth: 320 }}>
+                            <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: tipoArchivo(a.nombre, a.tipo).bg, color: tipoArchivo(a.nombre, a.tipo).fg }}>{tipoArchivo(a.nombre, a.tipo).etiqueta}</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.nombre}</span>
                           </a>
                         ))}
                       </div>
@@ -200,7 +241,8 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
           {archivos.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {archivos.map((a, i) => (
-                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, background: '#f6f7f9', borderRadius: 6, padding: '3px 8px' }}>
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, background: '#f6f7f9', borderRadius: 6, padding: '3px 8px 3px 4px' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: tipoArchivo(a.name, a.type).bg || '#e6eef8', color: tipoArchivo(a.name, a.type).fg || '#1d4f86' }}>{tipoArchivo(a.name, a.type).etiqueta}</span>
                   {a.name}
                   <button type="button" aria-label={`Quitar ${a.name}`} onClick={() => setArchivos(arr => arr.filter((_, j) => j !== i))}
                     style={{ border: 'none', background: 'none', font: 'inherit', fontSize: 15, cursor: 'pointer', color: '#595959', padding: '0 2px' }}>×</button>
@@ -223,12 +265,12 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
           )}
           <textarea ref={textoRef} rows={2} value={draft} onChange={e => setDraft(e.target.value)} aria-label="Mensaje para el grupo"
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !sugerencias.length) { e.preventDefault(); enviar(); } }}
-            placeholder="Escribí un mensaje para el grupo… (Enter envía, Shift+Enter baja de línea)"
+            placeholder="Escribí un mensaje para el grupo… (Enter envía, Shift+Enter baja de línea, o arrastrá archivos acá)"
             style={{ ...input, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 13 }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-            <input ref={fileRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" hidden
-              onChange={e => { setArchivos(arr => [...arr, ...Array.from(e.target.files || [])].slice(0, 6)); e.target.value = ''; }} />
-            <button type="button" onClick={() => fileRef.current?.click()} style={btnSec}>Foto o archivo</button>
+            <input ref={fileRef} type="file" multiple accept={ACCEPT_ARCHIVOS} hidden
+              onChange={e => { agregarArchivos(e.target.files); e.target.value = ''; }} />
+            <button type="button" onClick={() => fileRef.current?.click()} style={btnSec} title="También podés arrastrar los archivos al chat">Adjuntar archivo</button>
             <button type="button" onClick={mencionar} style={btnSec}><strong>@</strong> Mencionar</button>
             <button type="button" aria-pressed={decision} onClick={() => setDecision(d => !d)} style={{
               ...btnSec, background: decision ? '#fff1d6' : '#fff', borderColor: decision ? '#e0b45c' : '#c9c9c9',
@@ -268,9 +310,9 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {galeria.slice(0, 9).map(g => (
               <a key={g.id} href={g.url} target="_blank" rel="noreferrer" style={{ minWidth: 0, color: 'inherit', textDecoration: 'none' }} title={g.nombre}>
-                {g.tipo?.startsWith('image/')
+                {tipoArchivo(g.nombre, g.tipo).clase === 'imagen'
                   ? <img src={g.url} alt={g.nombre} loading="lazy" style={{ display: 'block', width: '100%', height: 48, objectFit: 'cover', borderRadius: 6, border: '1px solid #e3e3e3' }} />
-                  : <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 48, borderRadius: 6, border: '1px solid #e3e3e3', background: '#f6f7f9', fontSize: 11, fontWeight: 600, color: AZUL }}>PDF</span>}
+                  : <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 48, borderRadius: 6, border: '1px solid #e3e3e3', background: tipoArchivo(g.nombre, g.tipo).bg, fontSize: 11, fontWeight: 700, color: tipoArchivo(g.nombre, g.tipo).fg }}>{tipoArchivo(g.nombre, g.tipo).etiqueta}</span>}
                 <span style={{ display: 'block', marginTop: 2, fontSize: 10, lineHeight: 1.25, color: '#595959', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.nombre}</span>
                 <span style={{ display: 'block', fontSize: 10, lineHeight: 1.25, color: '#6b6b6b' }}>{primerNombre(g.autor)} · {diaDe(g.created_at)}</span>
               </a>

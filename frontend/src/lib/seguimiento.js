@@ -89,3 +89,20 @@ export function segmentar(texto, validos, yo) {
   if (ultimo < texto.length) out.push({ txt: texto.slice(ultimo) });
   return out;
 }
+
+// ── Archivos adjuntos ──────────────────────────────────────────────────────────
+export const MAX_MB_ARCHIVO = 25;
+export const EXTENSIONES_PERMITIDAS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'dwg'];
+export const ACCEPT_ARCHIVOS = EXTENSIONES_PERMITIDAS.map(e => '.' + e).join(',');
+export const extensionDe = (nombre) => String(nombre || '').split('.').pop().toLowerCase();
+
+// Cómo se muestra cada tipo de archivo (etiqueta y colores)
+export function tipoArchivo(nombre, mime) {
+  const ext = extensionDe(nombre);
+  if ((mime || '').startsWith('image/') && ext !== 'dwg') return { clase: 'imagen', etiqueta: 'Imagen' };
+  if (ext === 'pdf') return { clase: 'pdf', etiqueta: 'PDF', bg: '#fdecea', fg: '#a3261b' };
+  if (ext === 'doc' || ext === 'docx') return { clase: 'word', etiqueta: 'Word', bg: '#e8f0fb', fg: '#1d4f91' };
+  if (ext === 'xls' || ext === 'xlsx') return { clase: 'excel', etiqueta: 'Excel', bg: '#e6f4ea', fg: '#1e6b3a' };
+  if (ext === 'dwg') return { clase: 'dwg', etiqueta: 'DWG', bg: '#f1ecf9', fg: '#5a3591' };
+  return { clase: 'otro', etiqueta: ext.toUpperCase() || 'Archivo', bg: '#f1f1f1', fg: '#333333' };
+}
