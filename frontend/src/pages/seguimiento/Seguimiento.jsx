@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get } from '../../lib/api';
-import { ETAPAS, SIGLA_ROL, ORDEN_ROL, cuando, primerNombre } from '../../lib/seguimiento';
+import { ETAPAS, SIGLA_ROL, ORDEN_ROL, cuando, primerNombre, participaEn, leerPref, guardarPref } from '../../lib/seguimiento';
+import { useAuth } from '../../context/AuthContext';
 import { Avatar, AZUL } from './comunes';
 import { AlertaError } from '../../components/ui';
 
@@ -16,6 +17,10 @@ export default function Seguimiento({ base }) {
   const [error, setError] = useState('');
   const [buscar, setBuscar] = useState('');
   const [finalizados, setFinalizados] = useState(false);
+  const { usuario } = useAuth();
+  // "Solo mis proyectos": los que tienen al usuario en el equipo. Se recuerda en esta computadora.
+  const [soloMios, setSoloMios] = useState(() => leerPref('seguimiento_solo_mios', false));
+  const cambiarSoloMios = (v) => { setSoloMios(v); guardarPref('seguimiento_solo_mios', v); };
 
   const cargar = useCallback(async () => {
     try {
@@ -32,9 +37,12 @@ export default function Seguimiento({ base }) {
   }, [cargar]);
 
   const q = buscar.trim().toLowerCase();
-  const visibles = proyectos.filter(p => !q || `${p.nombre} ${p.cliente_nombre}`.toLowerCase().includes(q));
-  const totPend = proyectos.reduce((s, p) => s + p.pendientes, 0);
-  const totVenc = proyectos.reduce((s, p) => s + p.vencidas, 0);
+  const misProyectos = proyectos.filter(p => participaEn(p, usuario?.id));
+  const visibles = (soloMios ? misProyectos : proyectos)
+    .filter(p => !q || `${p.nombre} ${p.cliente_nombre}`.toLowerCase().includes(q));
+  const base_ = soloMios ? misProyectos : proyectos;
+  const totPend = base_.reduce((s, p) => s + p.pendientes, 0);
+  const totVenc = base_.reduce((s, p) => s + p.vencidas, 0);
 
   return (
     <div style={{ padding: '20px 24px', maxWidth: 1280 }}>
@@ -42,13 +50,18 @@ export default function Seguimiento({ base }) {
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Seguimiento de proyectos</h1>
           <p style={{ margin: '3px 0 0', color: '#595959', fontSize: 13 }}>
-            {plural(proyectos.length, 'proyecto', 'proyectos')} · {plural(totPend, 'tarea pendiente', 'tareas pendientes')} · {plural(totVenc, 'vencida', 'vencidas')}
+            {plural(base_.length, soloMios ? 'proyecto tuyo' : 'proyecto', soloMios ? 'proyectos tuyos' : 'proyectos')} · {plural(totPend, 'tarea pendiente', 'tareas pendientes')} · {plural(totVenc, 'vencida', 'vencidas')}
           </p>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
           <button type="button" onClick={() => navigate(`${base}/revision`)} style={{
             font: 'inherit', fontSize: 13, fontWeight: 500, padding: '6px 12px', border: 'none', borderRadius: 8, background: AZUL, color: '#fff', cursor: 'pointer',
           }}>Reunión de revisión</button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', fontWeight: soloMios ? 600 : 400 }}
+            title="Los proyectos donde estás en el equipo">
+            <input type="checkbox" checked={soloMios} onChange={e => cambiarSoloMios(e.target.checked)} />
+            Solo mis proyectos ({misProyectos.length})
+          </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={finalizados} onChange={e => setFinalizados(e.target.checked)} />
             Ver finalizados
@@ -129,7 +142,9 @@ export default function Seguimiento({ base }) {
         </div>
       )}
       {!cargando && !visibles.length && (
-        <p style={{ color: '#595959', padding: '24px 0' }}>{q ? 'No hay proyectos que coincidan con la búsqueda.' : 'No hay proyectos activos.'}</p>
+        <p style={{ color: '#595959', padding: '24px 0' }}>{q ? 'No hay proyectos que coincidan con la búsqueda.'
+            : soloMios ? 'No estás en el equipo de ningún proyecto. Destildá "Solo mis proyectos" para ver todos.'
+            : 'No hay proyectos activos.'}</p>
       )}
     </div>
   );
