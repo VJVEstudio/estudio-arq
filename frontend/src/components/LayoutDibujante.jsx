@@ -1,5 +1,6 @@
 import { useNavigate, Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { CampanaNotificaciones } from '../pages/seguimiento/comunes';
 
 const AZUL = '#1a2744';
 
@@ -44,6 +45,16 @@ export default function LayoutDibujante() {
             })}>
             <span>💰</span> Mis liquidaciones
           </NavLink>
+          <NavLink to="/dibujante/proyectos"
+            style={({ isActive }) => ({
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '9px 20px', margin: '1px 8px', borderRadius: '8px',
+              color: isActive ? 'white' : 'rgba(255,255,255,0.6)',
+              background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+              textDecoration: 'none', fontSize: '14px',
+            })}>
+            <span>💬</span> Proyectos
+          </NavLink>
         </nav>
 
         <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
@@ -71,7 +82,13 @@ export default function LayoutDibujante() {
         </div>
       </aside>
 
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+        <header style={{
+          height: 52, background: '#fff', borderBottom: '1px solid #e0e0e0', display: 'flex',
+          alignItems: 'center', justifyContent: 'flex-end', padding: '0 20px', position: 'sticky', top: 0, zIndex: 90,
+        }}>
+          <CampanaNotificaciones base="/dibujante/proyectos" />
+        </header>
         <Outlet />
       </div>
     </div>

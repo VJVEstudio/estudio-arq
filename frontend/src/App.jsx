@@ -20,6 +20,8 @@ import Usuarios        from './pages/admin/Usuarios';
 
 import MisHoras from './pages/dibujante/MisHoras';
 import MisLiquidaciones from './pages/dibujante/MisLiquidaciones';
+import Seguimiento from './pages/seguimiento/Seguimiento';
+import ProyectoSeguimiento from './pages/seguimiento/ProyectoSeguimiento';
 
 export default function App() {
   return (
@@ -44,6 +46,8 @@ export default function App() {
               <Route path="/admin/reportes"              element={<ReporteGeneral />} />
               <Route path="/admin/reportes/proyecto/:id" element={<ReporteProyecto />} />
               <Route path="/admin/usuarios"              element={<Usuarios />} />
+              <Route path="/admin/seguimiento"           element={<Seguimiento base="/admin/seguimiento" />} />
+              <Route path="/admin/seguimiento/:id"       element={<ProyectoSeguimiento base="/admin/seguimiento" />} />
             </Route>
           </Route>
 
@@ -51,6 +55,8 @@ export default function App() {
             <Route element={<LayoutDibujante />}>
 <Route path="/dibujante/horas"         element={<MisHoras />} />
               <Route path="/dibujante/liquidaciones"  element={<MisLiquidaciones />} />
+              <Route path="/dibujante/proyectos"      element={<Seguimiento base="/dibujante/proyectos" />} />
+              <Route path="/dibujante/proyectos/:id"  element={<ProyectoSeguimiento base="/dibujante/proyectos" />} />
               <Route path="/dibujante" element={<Navigate to="/dibujante/horas" replace />} />
             </Route>
           </Route>

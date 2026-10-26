@@ -29,6 +29,7 @@ app.use('/api/socios',        require('./routes/socios'));
 app.use('/api/rendiciones',   require('./routes/rendiciones'));
 app.use('/api/banco',         require('./routes/banco'));
 app.use('/api/usuarios',      require('./routes/usuarios'));
+app.use('/api/seguimiento',   require('./routes/seguimiento'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
