@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get, post, patch } from '../../lib/api';
-import { ETAPAS, ORDEN_ROL, fmtFecha, hoyISO, primerNombre } from '../../lib/seguimiento';
+import { ETAPAS, ORDEN_ROL, fmtFecha, hoyISO, primerNombre, participaEn, leerPref, guardarPref } from '../../lib/seguimiento';
+import { useAuth } from '../../context/AuthContext';
 import { Avatar, AZUL, ComentariosTarea, BotonComentarios, LinkDrive } from './comunes';
 import { AlertaError } from '../../components/ui';
 
@@ -136,6 +137,9 @@ export default function Revision({ base }) {
   const [todos, setTodos] = useState([]);
   const [seleccion, setSeleccion] = useState(leerSeleccion);
   const [elegir, setElegir] = useState(() => leerSeleccion().length === 0);
+  const { usuario } = useAuth();
+  const [soloMios, setSoloMios] = useState(() => leerPref('revision_solo_mios', false));
+  const cambiarSoloMios = (v) => { setSoloMios(v); guardarPref('revision_solo_mios', v); };
   const [detalles, setDetalles] = useState({});
   const [tachadas, setTachadas] = useState([]);
   const [error, setError] = useState('');
@@ -192,12 +196,17 @@ export default function Revision({ base }) {
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 10, padding: '8px 12px', marginBottom: 10 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>¿Qué proyectos revisan hoy?</p>
-            <button type="button" onClick={() => cambiarSeleccion(todos.map(p => p.id))} style={{ font: 'inherit', fontSize: 12, color: AZUL, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Todos</button>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer', fontWeight: soloMios ? 600 : 400 }}>
+              <input type="checkbox" checked={soloMios} onChange={e => cambiarSoloMios(e.target.checked)} style={{ accentColor: AZUL }} />
+              Solo mis proyectos
+            </label>
+            <button type="button" onClick={() => cambiarSeleccion([...new Set([...seleccion, ...todos.filter(p => !soloMios || participaEn(p, usuario?.id)).map(p => p.id)])])} style={{ font: 'inherit', fontSize: 12, color: AZUL, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Todos</button>
             <button type="button" onClick={() => cambiarSeleccion([])} style={{ font: 'inherit', fontSize: 12, color: AZUL, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Ninguno</button>
             <span style={{ fontSize: 11, color: '#6b6b6b' }}>La elección queda guardada en esta computadora para la próxima reunión.</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '2px 12px' }}>
-            {[...todos].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es', { numeric: true, sensitivity: 'base' })).map(p => (
+            {todos.filter(p => !soloMios || participaEn(p, usuario?.id))
+              .sort((x, y) => x.nombre.localeCompare(y.nombre, 'es', { numeric: true, sensitivity: 'base' })).map(p => (
               <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, padding: '3px 0', cursor: 'pointer' }}>
                 <input type="checkbox" checked={seleccion.includes(p.id)} onChange={() => alternar(p.id)} style={{ accentColor: AZUL }} />
                 <span style={{ minWidth: 0 }}>

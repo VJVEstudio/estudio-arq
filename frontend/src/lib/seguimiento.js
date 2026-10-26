@@ -106,3 +106,15 @@ export function tipoArchivo(nombre, mime) {
   if (ext === 'dwg') return { clase: 'dwg', etiqueta: 'DWG', bg: '#f1ecf9', fg: '#5a3591' };
   return { clase: 'otro', etiqueta: ext.toUpperCase() || 'Archivo', bg: '#f1f1f1', fg: '#333333' };
 }
+
+// ¿El usuario está en el equipo del proyecto? (para "Solo mis proyectos")
+export const participaEn = (proyecto, usuarioId) =>
+  (proyecto.equipo || []).some(e => String(e.usuario_id) === String(usuarioId));
+
+// Preferencias chicas que se recuerdan en esta computadora (si el navegador lo permite)
+export function leerPref(clave, porDefecto) {
+  try { const v = localStorage.getItem(clave); return v === null ? porDefecto : JSON.parse(v); } catch { return porDefecto; }
+}
+export function guardarPref(clave, valor) {
+  try { localStorage.setItem(clave, JSON.stringify(valor)); } catch { /* sin almacenamiento: no se recuerda */ }
+}

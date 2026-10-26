@@ -265,7 +265,17 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
           )}
           <textarea ref={textoRef} rows={2} value={draft} onChange={e => setDraft(e.target.value)} aria-label="Mensaje para el grupo"
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !sugerencias.length) { e.preventDefault(); enviar(); } }}
-            placeholder="Escribí un mensaje para el grupo… (Enter envía, Shift+Enter baja de línea, o arrastrá archivos acá)"
+            onPaste={e => {
+              // Capturas de pantalla pegadas con Ctrl+V: se adjuntan como imagen con nombre y hora
+              const imgs = Array.from(e.clipboardData?.files || []).filter(f => f.type.startsWith('image/'));
+              if (!imgs.length) return;
+              e.preventDefault();
+              const d = new Date();
+              const p2 = (n) => String(n).padStart(2, '0');
+              const sello = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}.${p2(d.getMinutes())}.${p2(d.getSeconds())}`;
+              agregarArchivos(imgs.map((f, i) => new File([f], `Captura ${sello}${imgs.length > 1 ? ` (${i + 1})` : ''}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })));
+            }}
+            placeholder="Escribí un mensaje… (Enter envía, Shift+Enter baja de línea). Podés pegar capturas con Ctrl+V o arrastrar archivos acá."
             style={{ ...input, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 13 }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
             <input ref={fileRef} type="file" multiple accept={ACCEPT_ARCHIVOS} hidden
