@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { get, post, put, patch, del, enviarForm } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import {
   ETAPAS, ROLES, ORDEN_ROL, RESP_ROL, TIPOS_HIST, primerNombre, diaDe, horaDe, cuando, fmtFecha, hoyISO, segmentar,
 } from '../../lib/seguimiento';
-import { Avatar, AZUL } from './comunes';
+import { Avatar, AZUL, ComentariosTarea, BotonComentarios, LinkDrive } from './comunes';
 import { AlertaError } from '../../components/ui';
 
 const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
@@ -22,7 +22,7 @@ function vistaTarea(t) {
 }
 
 // ═══════════════════════════════ Grupo ═══════════════════════════════
-function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTareas, alternarTarea }) {
+function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTareas, irATarea, alternarTarea }) {
   const [draft, setDraft] = useState('');
   const [decision, setDecision] = useState(false);
   const [archivos, setArchivos] = useState([]);
@@ -160,11 +160,20 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
                         </span>
                       </div>
                     ) : m.texto && (
+                      <>
+                      {m.tarea_id && (
+                        <button type="button" onClick={() => irATarea(m.tarea_id)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 3, font: 'inherit', fontSize: 11, padding: '1px 7px', borderRadius: 10, border: '1px solid #c9d3e3', background: '#fff', color: AZUL, cursor: 'pointer', maxWidth: '100%' }}>
+                          <span aria-hidden="true">↳</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Sobre la tarea «{m.tarea_titulo || 'tarea borrada'}»</span>
+                        </button>
+                      )}
                       <p style={{ margin: '2px 0 0', lineHeight: 1.4, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
                         {segmentar(m.texto, validos, miNombre).map((sg, i) => sg.mencion ? (
                           <span key={i} style={{ background: sg.fuerte ? '#fff1d6' : '#e6eef8', color: sg.fuerte ? '#7a4a00' : '#1d4f86', fontWeight: 600, padding: '0 3px', borderRadius: 4 }}>{sg.txt}</span>
                         ) : <span key={i}>{sg.txt}</span>)}
                       </p>
+                      </>
                     )}
                     {m.archivos?.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
@@ -275,7 +284,7 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
 }
 
 // ═══════════════════════════════ Tareas ═══════════════════════════════
-function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea }) {
+function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea, tareaAbierta, setTareaAbierta }) {
   const defResp = (personas.find(p => p.rol === 'Dibujante') || personas.find(p => String(p.usuario_id) === String(yo.id)) || personas[0])?.usuario_id || '';
   const enUnaSemana = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
   const [nt, setNt] = useState({ titulo: '', responsable_id: defResp, fecha_limite: enUnaSemana });
@@ -296,7 +305,35 @@ function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea }) {
   const todas = datos.tareas.map(vistaTarea);
   const pendientes = todas.filter(t => !t.hecha);
   const hechas = todas.filter(t => t.hecha);
-  const fila = { display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: 13 };
+  const fila = { display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center', padding: '4px 12px', fontSize: 13 };
+  const comentariosDe = (tid) => datos.mensajes.filter(m => m.tarea_id === tid && !m.borrado_at);
+  const filaTarea = (t, hecha) => {
+    const abierta = tareaAbierta === t.id;
+    return (
+      <div key={t.id} id={`tarea-${t.id}`} style={{ borderBottom: '1px solid #f0f0f0', background: abierta ? '#fbfcfe' : undefined }}>
+        <div style={{ ...fila, color: hecha ? '#595959' : undefined }}>
+          <label style={{ flex: '999 1 260px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={hecha} onChange={() => alternarTarea(t)} style={{ width: 15, height: 15, accentColor: AZUL }} />
+            <span style={{ textDecoration: hecha ? 'line-through' : 'none' }}>{t.titulo}</span>
+          </label>
+          <BotonComentarios cantidad={t.comentarios} abierto={abierta} onClick={() => setTareaAbierta(abierta ? null : t.id)} />
+          <span style={{ flex: '1 1 160px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+            {!hecha && t.responsable_id && <Avatar id={t.responsable_id} nombre={t.responsable} tam={20} />}
+            {t.responsable || 'Sin responsable'}
+          </span>
+          <span style={{ flex: '0 0 120px', fontSize: 12, color: !hecha && t.vencida ? '#b91c1c' : '#595959', fontWeight: !hecha && t.vencida ? 600 : 400 }}>{t.fechaTxt}</span>
+        </div>
+        {abierta && (
+          <ComentariosTarea proyectoId={datos.proyecto.id} tareaId={t.id} comentarios={comentariosDe(t.id)}
+            onEnviado={onRecargar} onError={onError} autoFocus />
+        )}
+      </div>
+    );
+  };
+  // Al llegar desde un comentario del grupo o de la reunión, se muestra la tarea
+  useEffect(() => {
+    if (tareaAbierta) document.getElementById(`tarea-${tareaAbierta}`)?.scrollIntoView({ block: 'center' });
+  }, [tareaAbierta]);
 
   return (
     <div>
@@ -320,31 +357,14 @@ function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea }) {
 
       <section aria-label="Tareas pendientes" style={{ ...caja, overflow: 'hidden', marginBottom: 8 }}>
         <h2 style={tituloCaja}>Pendientes ({pendientes.length})</h2>
-        {pendientes.map(t => (
-          <label key={t.id} style={fila}>
-            <input type="checkbox" checked={false} onChange={() => alternarTarea(t)} style={{ width: 15, height: 15, accentColor: AZUL }} />
-            <span style={{ flex: '999 1 240px', minWidth: 0 }}>{t.titulo}</span>
-            <span style={{ flex: '1 1 160px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-              {t.responsable_id && <Avatar id={t.responsable_id} nombre={t.responsable} tam={20} />}
-              {t.responsable || 'Sin responsable'}
-            </span>
-            <span style={{ flex: '0 0 120px', fontSize: 12, color: t.vencida ? '#b91c1c' : '#595959', fontWeight: t.vencida ? 600 : 400 }}>{t.fechaTxt}</span>
-          </label>
-        ))}
+        {pendientes.map(t => filaTarea(t, false))}
         {!pendientes.length && <p style={{ margin: 0, padding: '8px 12px', fontSize: 13, color: '#595959' }}>No hay tareas pendientes.</p>}
       </section>
 
       {hechas.length > 0 && (
         <section aria-label="Tareas hechas" style={{ ...caja, overflow: 'hidden' }}>
           <h2 style={{ ...tituloCaja, color: '#595959' }}>Hechas ({hechas.length})</h2>
-          {hechas.map(t => (
-            <label key={t.id} style={{ ...fila, color: '#595959' }}>
-              <input type="checkbox" checked onChange={() => alternarTarea(t)} style={{ width: 15, height: 15, accentColor: AZUL }} />
-              <span style={{ flex: '999 1 240px', minWidth: 0, textDecoration: 'line-through' }}>{t.titulo}</span>
-              <span style={{ flex: '1 1 160px', fontSize: 12 }}>{t.responsable || 'Sin responsable'}</span>
-              <span style={{ flex: '0 0 120px', fontSize: 12 }}>{t.fechaTxt}</span>
-            </label>
-          ))}
+          {hechas.map(t => filaTarea(t, true))}
         </section>
       )}
     </div>
@@ -525,6 +545,8 @@ export default function ProyectoSeguimiento({ base }) {
   const [usuarios, setUsuarios] = useState([]);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('grupo');
+  const [tareaAbierta, setTareaAbierta] = useState(null);
+  const [params, setParams] = useSearchParams();
 
   const cargar = useCallback(async (marcarLeido = false) => {
     try {
@@ -537,7 +559,12 @@ export default function ProyectoSeguimiento({ base }) {
     } catch (err) { setError(err.message); }
   }, [id]);
 
-  useEffect(() => { setDatos(null); setTab('grupo'); cargar(true); }, [cargar]);
+  useEffect(() => { setDatos(null); setTab('grupo'); setTareaAbierta(null); cargar(true); }, [cargar]);
+  // ?tarea=<id> (por ejemplo, desde la reunión de revisión) abre esa tarea con sus comentarios
+  useEffect(() => {
+    const t = params.get('tarea');
+    if (t) { setTab('tareas'); setTareaAbierta(t); setParams({}, { replace: true }); }
+  }, [params, setParams]);
   useEffect(() => { get('/seguimiento/usuarios').then(setUsuarios).catch(() => {}); }, []);
   // Se actualiza solo cada 15 s (si la pestaña del navegador está a la vista)
   useEffect(() => {
@@ -586,9 +613,12 @@ export default function ProyectoSeguimiento({ base }) {
       <div style={{ ...caja, padding: '7px 12px', marginBottom: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 16px' }}>
         <button type="button" onClick={() => navigate(base)} aria-label="Volver a todos los proyectos"
           style={{ font: 'inherit', fontSize: 13, color: AZUL, background: 'transparent', border: '1px solid #d6d9df', padding: '4px 9px', borderRadius: 6, cursor: 'pointer' }}>← Proyectos</button>
-        <div style={{ minWidth: 0, flex: '1 1 220px', display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <h1 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>{datos.proyecto.nombre}</h1>
-          <span style={{ fontSize: 12, color: '#595959' }}>{datos.proyecto.cliente_nombre}</span>
+        <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>{datos.proyecto.nombre}</h1>
+            <span style={{ fontSize: 12, color: '#595959' }}>{datos.proyecto.cliente_nombre}</span>
+          </div>
+          <LinkDrive proyectoId={datos.proyecto.id} url={datos.proyecto.drive_url} onGuardado={cargar} onError={setError} />
         </div>
         <button type="button" onClick={() => setTab('equipo')}
           title={`Equipo: ${personas.map(p => `${p.nombre} (${p.rol})`).join(', ')}`}
@@ -617,8 +647,8 @@ export default function ProyectoSeguimiento({ base }) {
 
       <AlertaError mensaje={error} onCerrar={() => setError('')} />
 
-      {tab === 'grupo' && <Grupo {...comunes} irTareas={() => setTab('tareas')} />}
-      {tab === 'tareas' && <Tareas {...comunes} />}
+      {tab === 'grupo' && <Grupo {...comunes} irTareas={() => setTab('tareas')} irATarea={(tid) => { setTareaAbierta(tid); setTab('tareas'); }} />}
+      {tab === 'tareas' && <Tareas {...comunes} tareaAbierta={tareaAbierta} setTareaAbierta={setTareaAbierta} />}
       {tab === 'equipo' && <Equipo datos={datos} usuarios={usuarios} onRecargar={cargar} onError={setError} />}
       {tab === 'historial' && <Historial datos={datos} esAdmin={esAdmin} />}
     </div>

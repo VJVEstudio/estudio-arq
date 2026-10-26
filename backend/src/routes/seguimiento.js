@@ -104,6 +104,11 @@ function asegurarEsquema() {
           usuario_id   ${U} PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
           leidas_hasta TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+        -- Comentarios sobre una tarea: son mensajes del grupo pegados a esa tarea
+        ALTER TABLE seg_mensajes ADD COLUMN IF NOT EXISTS tarea_id UUID REFERENCES seg_tareas(id) ON DELETE SET NULL;
+        CREATE INDEX IF NOT EXISTS seg_mensajes_tarea_idx ON seg_mensajes (tarea_id);
+        -- Link a la carpeta del proyecto en Google Drive
+        ALTER TABLE seg_proyectos ADD COLUMN IF NOT EXISTS drive_url TEXT;
       `);
     })().catch(err => { esquemaListo = null; throw err; });
   }
@@ -224,7 +229,7 @@ router.get('/proyectos/:id', envolver(async (req, res) => {
   const pid = req.params.id;
   const admin = esAdmin(req);
   const { rows: [proyecto] } = await query(
-    `SELECT p.id, p.nombre, p.estado, c.nombre_razon_social AS cliente_nombre, COALESCE(sp.etapa, 0) AS etapa
+    `SELECT p.id, p.nombre, p.estado, c.nombre_razon_social AS cliente_nombre, COALESCE(sp.etapa, 0) AS etapa, sp.drive_url
      FROM proyectos p JOIN clientes c ON c.id = p.cliente_id
      LEFT JOIN seg_proyectos sp ON sp.proyecto_id = p.id
      WHERE p.id = $1`, [pid]
@@ -238,7 +243,7 @@ router.get('/proyectos/:id', envolver(async (req, res) => {
            WHERE s.activo = TRUE AND u.activo = TRUE ORDER BY u.nombre`),
     query(
       `SELECT * FROM (
-         SELECT m.id, m.usuario_id, u.nombre AS autor, m.decision, m.created_at,
+         SELECT m.id, m.usuario_id, u.nombre AS autor, m.decision, m.created_at, m.tarea_id, tt.titulo AS tarea_titulo,
                 CASE WHEN m.borrado_at IS NULL THEN m.texto END AS texto,
                 m.editado_at, ue.nombre AS editado_por_nombre, (m.editado_por IS NOT NULL AND m.editado_por <> m.usuario_id) AS editado_por_otro,
                 m.borrado_at, ub.nombre AS borrado_por_nombre,
@@ -248,11 +253,13 @@ router.get('/proyectos/:id', envolver(async (req, res) => {
          JOIN usuarios u ON u.id = m.usuario_id
          LEFT JOIN usuarios ue ON ue.id = m.editado_por
          LEFT JOIN usuarios ub ON ub.id = m.borrado_por
+         LEFT JOIN seg_tareas tt ON tt.id = m.tarea_id
          WHERE m.proyecto_id = $1 ${admin ? '' : 'AND m.borrado_at IS NULL'}
          ORDER BY m.created_at DESC LIMIT 400
        ) x ORDER BY created_at ASC`, [pid]),
     query(`SELECT t.id, t.titulo, t.responsable_id, u.nombre AS responsable, to_char(t.fecha_limite, 'YYYY-MM-DD') AS fecha_limite,
-                  t.hecha, t.hecha_at, t.created_at
+                  t.hecha, t.hecha_at, t.created_at,
+                  (SELECT COUNT(*) FROM seg_mensajes m WHERE m.tarea_id = t.id AND m.borrado_at IS NULL)::int AS comentarios
            FROM seg_tareas t LEFT JOIN usuarios u ON u.id = t.responsable_id
            WHERE t.proyecto_id = $1 ORDER BY t.hecha, t.fecha_limite NULLS LAST, t.created_at`, [pid]),
     query(`SELECT h.id, h.tipo, h.texto, h.solo_admin, h.created_at, u.nombre AS usuario
@@ -294,6 +301,25 @@ router.put('/proyectos/:id/etapa', envolver(async (req, res) => {
   const quien = await nombreDe({ query }, req.usuario.id);
   await registrar({ query }, pid, req.usuario.id, 'etapa', `${quien} pasó el proyecto de ${ETAPAS[actual.etapa]} a ${ETAPAS[etapa]}`);
   res.json({ etapa });
+}));
+
+// ── Link a la carpeta de Google Drive ──────────────────────────────────────────
+router.put('/proyectos/:id/drive', envolver(async (req, res) => {
+  const pid = req.params.id;
+  const url = (req.body.url || '').trim();
+  if (url && !/^https:\/\/\S+$/i.test(url)) {
+    return res.status(400).json({ error: 'El link tiene que empezar con https://' });
+  }
+  const { rows: [antes] } = await query(`SELECT drive_url FROM seg_proyectos WHERE proyecto_id = $1`, [pid]);
+  if ((antes?.drive_url || '') === url) return res.json({ drive_url: url || null });
+  await query(
+    `INSERT INTO seg_proyectos (proyecto_id, drive_url, updated_at) VALUES ($1, $2, NOW())
+     ON CONFLICT (proyecto_id) DO UPDATE SET drive_url = $2, updated_at = NOW()`, [pid, url || null]
+  );
+  const quien = await nombreDe({ query }, req.usuario.id);
+  await registrar({ query }, pid, req.usuario.id, 'datos',
+    url ? `${quien} ${antes?.drive_url ? 'cambió' : 'agregó'} el link a la carpeta de Drive` : `${quien} quitó el link a la carpeta de Drive`);
+  res.json({ drive_url: url || null });
 }));
 
 // ── Equipo ─────────────────────────────────────────────────────────────────────
@@ -361,6 +387,11 @@ router.post('/proyectos/:id/mensajes', upload.array('archivos', 6), envolver(asy
   const pid = req.params.id;
   const texto = (req.body.texto || '').trim();
   const decision = req.body.decision === 'true' || req.body.decision === true;
+  const tareaId = req.body.tarea_id || null;
+  if (tareaId) {
+    const { rows } = await query(`SELECT 1 FROM seg_tareas WHERE id = $1 AND proyecto_id = $2`, [tareaId, pid]);
+    if (!rows.length) return res.status(400).json({ error: 'La tarea no es de este proyecto' });
+  }
   // multer entrega el nombre original en latin1: se pasa a UTF-8 para no romper los acentos
   const archivos = (req.files || []).map(a => ({ ...a, originalname: Buffer.from(a.originalname, 'latin1').toString('utf8') }));
   if (!texto && !archivos.length) return res.status(400).json({ error: 'El mensaje está vacío' });
@@ -377,8 +408,8 @@ router.post('/proyectos/:id/mensajes', upload.array('archivos', 6), envolver(asy
   try {
     await client.query('BEGIN');
     const { rows: [m] } = await client.query(
-      `INSERT INTO seg_mensajes (proyecto_id, usuario_id, texto, decision) VALUES ($1, $2, $3, $4) RETURNING id`,
-      [pid, req.usuario.id, texto || null, decision]
+      `INSERT INTO seg_mensajes (proyecto_id, usuario_id, texto, decision, tarea_id) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [pid, req.usuario.id, texto || null, decision, tareaId]
     );
     for (const s of subidos) {
       await client.query(`INSERT INTO seg_archivos (mensaje_id, url, nombre, tipo) VALUES ($1, $2, $3, $4)`, [m.id, s.url, s.nombre, s.tipo]);

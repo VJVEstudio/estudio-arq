@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { get, post } from '../../lib/api';
+import { get, post, put, enviarForm } from '../../lib/api';
 import { iniciales, colorDe, cuando } from '../../lib/seguimiento';
 
 export const AZUL = '#1a2744';
@@ -111,5 +111,119 @@ export function CampanaNotificaciones({ base }) {
         </section>
       )}
     </div>
+  );
+}
+
+// Comentarios de una tarea: son mensajes del grupo pegados a esa tarea.
+// Se ven acá y también en el chat del grupo como "Sobre la tarea …".
+export function ComentariosTarea({ proyectoId, tareaId, comentarios, onEnviado, onError, autoFocus = false }) {
+  const [texto, setTexto] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const enviar = async (e) => {
+    e?.preventDefault();
+    if (!texto.trim() || enviando) return;
+    setEnviando(true);
+    try {
+      const fd = new FormData();
+      fd.append('texto', texto.trim());
+      fd.append('tarea_id', tareaId);
+      await enviarForm(`/seguimiento/proyectos/${proyectoId}/mensajes`, fd);
+      setTexto('');
+      await onEnviado?.();
+    } catch (err) { onError?.(err.message); }
+    finally { setEnviando(false); }
+  };
+  return (
+    <div style={{ background: '#f8f9fb', borderTop: '1px solid #eceef2', padding: '6px 12px 8px 36px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {comentarios.map(c => (
+        <div key={c.id} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 12 }}>
+          <Avatar id={c.usuario_id} nombre={c.autor} tam={18} />
+          <span style={{ minWidth: 0, lineHeight: 1.35 }}>
+            <strong style={{ fontWeight: 600 }}>{c.autor.split(' ')[0]}</strong>{' '}
+            <span style={{ color: '#6b6b6b' }}>{cuando(c.created_at)}</span>{' '}
+            <span style={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{c.texto}</span>
+          </span>
+        </div>
+      ))}
+      {!comentarios.length && <p style={{ margin: 0, fontSize: 12, color: '#6b6b6b' }}>Sin comentarios todavía.</p>}
+      <form onSubmit={enviar} style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+        <input value={texto} onChange={e => setTexto(e.target.value)} autoFocus={autoFocus}
+          aria-label="Comentario sobre la tarea" placeholder="Comentario sobre esta tarea (también va al grupo)…"
+          style={{ flex: 1, minWidth: 0, padding: '4px 8px', font: 'inherit', fontSize: 12, border: '1px solid #c9c9c9', borderRadius: 6, background: '#fff' }} />
+        <button type="submit" disabled={!texto.trim() || enviando}
+          style={{ font: 'inherit', fontSize: 12, fontWeight: 500, padding: '4px 10px', border: 'none', borderRadius: 6, background: AZUL, color: '#fff', cursor: 'pointer', opacity: !texto.trim() || enviando ? 0.5 : 1 }}>
+          {enviando ? '…' : 'Comentar'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// Botón chico con la cantidad de comentarios de una tarea
+export function BotonComentarios({ cantidad, abierto, onClick }) {
+  return (
+    <button type="button" onClick={onClick} aria-expanded={abierto}
+      aria-label={`${cantidad ? cantidad + ' comentario' + (cantidad === 1 ? '' : 's') : 'Comentar'} sobre la tarea`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4, font: 'inherit', fontSize: 12, padding: '2px 8px', borderRadius: 12,
+        border: `1px solid ${abierto ? AZUL : '#d6d9df'}`, background: abierto ? '#eef2f8' : '#fff', color: AZUL, cursor: 'pointer', whiteSpace: 'nowrap',
+      }}>
+      <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+      {cantidad || 'Comentar'}
+    </button>
+  );
+}
+
+// Link a la carpeta del proyecto en Google Drive (se agrega, cambia o quita acá mismo)
+export function LinkDrive({ proyectoId, url, onGuardado, onError }) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(url || '');
+  const [guardando, setGuardando] = useState(false);
+  useEffect(() => { setValor(url || ''); }, [url]);
+  const guardar = async (e) => {
+    e?.preventDefault();
+    setGuardando(true);
+    try {
+      await put(`/seguimiento/proyectos/${proyectoId}/drive`, { url: valor.trim() });
+      setEditando(false);
+      await onGuardado?.();
+    } catch (err) { onError?.(err.message); }
+    finally { setGuardando(false); }
+  };
+  const chico = { font: 'inherit', fontSize: 12, background: 'none', border: 'none', color: AZUL, cursor: 'pointer', padding: '1px 4px' };
+  const icono = (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  );
+  if (editando) {
+    return (
+      <form onSubmit={guardar} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', fontSize: 12 }}>
+        <input type="url" value={valor} onChange={e => setValor(e.target.value)} autoFocus aria-label="Link a la carpeta de Google Drive"
+          placeholder="https://drive.google.com/drive/folders/…"
+          style={{ flex: '1 1 320px', minWidth: 0, padding: '3px 8px', font: 'inherit', fontSize: 12, border: '1px solid #c9c9c9', borderRadius: 6 }} />
+        <button type="submit" disabled={guardando} style={{ ...chico, fontWeight: 600 }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+        {url && <button type="button" onClick={() => setValor('')} style={{ ...chico, color: '#b91c1c' }}>Quitar</button>}
+        <button type="button" onClick={() => { setEditando(false); setValor(url || ''); }} style={{ ...chico, color: '#595959' }}>Cancelar</button>
+      </form>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+      {url ? (
+        <>
+          <a href={url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: AZUL, fontWeight: 500 }}>
+            {icono} Carpeta en Drive
+          </a>
+          <button type="button" onClick={() => setEditando(true)} aria-label="Cambiar el link de Drive" style={{ ...chico, color: '#6b6b6b' }}>cambiar</button>
+        </>
+      ) : (
+        <button type="button" onClick={() => setEditando(true)} style={{ ...chico, display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0 }}>
+          {icono} Agregar link a la carpeta de Drive
+        </button>
+      )}
+    </span>
   );
 }
