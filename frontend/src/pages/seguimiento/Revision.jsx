@@ -197,7 +197,7 @@ export default function Revision({ base }) {
             <span style={{ fontSize: 11, color: '#6b6b6b' }}>La elección queda guardada en esta computadora para la próxima reunión.</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '2px 12px' }}>
-            {todos.map(p => (
+            {[...todos].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es', { numeric: true, sensitivity: 'base' })).map(p => (
               <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, padding: '3px 0', cursor: 'pointer' }}>
                 <input type="checkbox" checked={seleccion.includes(p.id)} onChange={() => alternar(p.id)} style={{ accentColor: AZUL }} />
                 <span style={{ minWidth: 0 }}>
