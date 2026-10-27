@@ -28,7 +28,7 @@ export const RE_MENCION = /@([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)/g;
 
 export const primerNombre = (n) => String(n || '').trim().split(/\s+/)[0] || '';
 
-// Iniciales de nombre y apellido: "Salvador Viales" → "SV"
+// Iniciales de nombre y apellido: "Salvador Viale" → "SV"
 export function iniciales(nombre) {
   const p = String(nombre || '').trim().split(/\s+/).filter(Boolean);
   if (!p.length) return '?';
