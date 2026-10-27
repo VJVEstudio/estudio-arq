@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get, post, put, enviarForm } from '../../lib/api';
-import { iniciales, colorDe, cuando } from '../../lib/seguimiento';
+import { iniciales, colorDe, cuando, leerPref, guardarPref } from '../../lib/seguimiento';
+import { useEsCelular } from '../../lib/useEsCelular';
+import { estadoPush, activarPush, desactivarPush, probarPush } from '../../lib/push';
 
 export const AZUL = '#1a2744';
 
@@ -24,6 +26,7 @@ export function CampanaNotificaciones({ base }) {
   const [abierto, setAbierto] = useState(false);
   const [datos, setDatos] = useState({ notificaciones: [], sin_leer: 0 });
   const ref = useRef(null);
+  const movil = useEsCelular();
 
   const cargar = useCallback(async () => {
     try { setDatos(await get('/seguimiento/notificaciones')); } catch { /* sin conexión: se reintenta */ }
@@ -70,7 +73,7 @@ export function CampanaNotificaciones({ base }) {
       </button>
       {abierto && (
         <section aria-label="Notificaciones" style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 300, width: 380, maxWidth: '86vw',
+          ...(movil ? { position: 'fixed', top: 54, left: 8, right: 8 } : { position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 380, maxWidth: '86vw' }), zIndex: 300,
           background: '#fff', border: '1px solid #d6d6d6', borderRadius: 10, boxShadow: '0 10px 28px rgba(0,0,0,0.14)', overflow: 'hidden',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: '1px solid #ececec', background: '#fafafa' }}>
@@ -81,7 +84,7 @@ export function CampanaNotificaciones({ base }) {
               </button>
             )}
           </div>
-          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+          <div style={{ maxHeight: movil ? 'calc(100dvh - 230px)' : 420, overflowY: 'auto' }}>
             {datos.notificaciones.map(nf => (
               <button key={nf.id} type="button" onClick={() => { setAbierto(false); navigate(`${base}/${nf.proyecto_id}`); }}
                 style={{
@@ -108,8 +111,85 @@ export function CampanaNotificaciones({ base }) {
               </p>
             )}
           </div>
+          <div style={{ borderTop: '1px solid #ececec', background: '#fafafa', padding: '8px 12px' }}>
+            <AvisosDispositivo />
+          </div>
         </section>
       )}
+    </div>
+  );
+}
+
+// ── Avisos en el celular ─────────────────────────────────────────────────────────
+// Hook con el estado de los avisos push en este dispositivo y las acciones.
+function useAvisos() {
+  const [estado, setEstado] = useState(null);
+  const [ocupado, setOcupado] = useState(false);
+  const [msg, setMsg] = useState('');
+  const refrescar = useCallback(() => { estadoPush().then(setEstado).catch(() => setEstado('no-soportado')); }, []);
+  useEffect(() => { refrescar(); }, [refrescar]);
+  const hacer = (fn, ok) => async () => {
+    setOcupado(true); setMsg('');
+    try { await fn(); if (ok) setMsg(ok); }
+    catch (err) { setMsg(err.message || 'No se pudo completar'); }
+    finally { setOcupado(false); refrescar(); }
+  };
+  return {
+    estado, ocupado, msg,
+    activar: hacer(async () => { await activarPush(); await probarPush().catch(() => {}); }, 'Listo: te mandamos un aviso de prueba.'),
+    desactivar: hacer(desactivarPush, 'Avisos desactivados en este dispositivo.'),
+    probar: hacer(probarPush, 'Aviso de prueba enviado.'),
+  };
+}
+
+const botonChico = { font: 'inherit', fontSize: 12, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', border: '1px solid #d6d9df', background: '#fff', color: AZUL };
+const botonAzul = { ...botonChico, border: 'none', background: AZUL, color: '#fff', fontWeight: 500 };
+
+export const INSTRUCCION_IPHONE = 'En iPhone: abrí la app en Safari, tocá Compartir (el cuadrado con la flecha) → "Agregar a inicio". Después abrí VJV desde ese ícono y activá los avisos.';
+
+// Bloque "Avisos en este dispositivo" (va al pie de la campana)
+export function AvisosDispositivo() {
+  const { estado, ocupado, msg, activar, desactivar, probar } = useAvisos();
+  if (!estado) return null;
+  const texto = { fontSize: 12, color: '#595959', margin: 0, lineHeight: 1.4 };
+  return (
+    <div>
+      <p style={{ ...texto, fontWeight: 600, color: '#1a1a1a', marginBottom: 3 }}>📱 Avisos en este dispositivo</p>
+      {estado === 'activo' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ ...texto, color: '#1f5e37' }}>Activados: te llega cada mensaje de tus proyectos.</span>
+          <button type="button" disabled={ocupado} onClick={probar} style={botonChico}>Probar</button>
+          <button type="button" disabled={ocupado} onClick={desactivar} style={botonChico}>Desactivar</button>
+        </div>
+      )}
+      {estado === 'inactivo' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={texto}>Recibí cada mensaje de tus proyectos como notificación, aunque la app esté cerrada.</span>
+          <button type="button" disabled={ocupado} onClick={activar} style={botonAzul}>{ocupado ? 'Activando…' : 'Activar avisos'}</button>
+        </div>
+      )}
+      {estado === 'ios-instalar' && <p style={texto}>{INSTRUCCION_IPHONE}</p>}
+      {estado === 'bloqueado' && <p style={texto}>Los avisos están bloqueados para esta app. Habilitalos en la configuración del navegador (o del celular) y volvé acá.</p>}
+      {estado === 'no-soportado' && <p style={texto}>Este navegador no admite avisos. En el celular usá Chrome (Android) o la app instalada (iPhone).</p>}
+      {msg && <p style={{ ...texto, marginTop: 4, color: AZUL }}>{msg}</p>}
+    </div>
+  );
+}
+
+// Franja que invita a activar los avisos (en el tablero), hasta que se activen o se cierre
+export function InvitacionAvisos() {
+  const { estado, ocupado, msg, activar } = useAvisos();
+  const [oculta, setOculta] = useState(() => leerPref('avisos_invitacion_oculta', false));
+  if (oculta || !(estado === 'inactivo' || estado === 'ios-instalar') && !msg) return null;
+  const cerrar = () => { setOculta(true); guardarPref('avisos_invitacion_oculta', true); };
+  return (
+    <div role="note" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#eef2fa', border: '1px solid #cdd7ea', borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>
+      <span style={{ flex: '1 1 260px' }}>
+        {msg ? msg : estado === 'ios-instalar' ? <>📱 <strong>Recibí los mensajes en el celu.</strong> {INSTRUCCION_IPHONE}</>
+          : <>📱 <strong>Recibí los mensajes de tus proyectos en este dispositivo</strong>, como en WhatsApp.</>}
+      </span>
+      {estado === 'inactivo' && !msg && <button type="button" disabled={ocupado} onClick={activar} style={botonAzul}>{ocupado ? 'Activando…' : 'Activar avisos'}</button>}
+      <button type="button" onClick={cerrar} aria-label="Cerrar" style={{ ...botonChico, border: 'none', background: 'transparent', fontSize: 16, padding: '0 6px' }}>×</button>
     </div>
   );
 }

@@ -7,6 +7,7 @@ const multer = require('multer');
 const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 const { subirArchivo } = require('../utils/supabaseStorage');
+const push = require('../utils/push');
 
 const router = express.Router();
 router.use(auth.verificar);
@@ -129,6 +130,20 @@ function asegurarEsquema() {
         CREATE INDEX IF NOT EXISTS seg_mensajes_tarea_idx ON seg_mensajes (tarea_id);
         -- Link a la carpeta del proyecto en Google Drive
         ALTER TABLE seg_proyectos ADD COLUMN IF NOT EXISTS drive_url TEXT;
+        -- Avisos push: configuración (claves del servidor) y dispositivos de cada usuario
+        CREATE TABLE IF NOT EXISTS seg_config (
+          clave TEXT PRIMARY KEY,
+          valor TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS seg_push (
+          id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          usuario_id ${U} NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+          endpoint   TEXT NOT NULL UNIQUE,
+          p256dh     TEXT NOT NULL,
+          auth       TEXT NOT NULL,
+          dispositivo TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
       `);
     })().catch(err => { esquemaListo = null; throw err; });
   }
@@ -432,6 +447,7 @@ router.post('/proyectos/:id/mensajes', recibirArchivos, envolver(async (req, res
     }
   }
   const client = await pool.connect();
+  let quien = '';
   try {
     await client.query('BEGIN');
     const { rows: [m] } = await client.query(
@@ -442,7 +458,7 @@ router.post('/proyectos/:id/mensajes', recibirArchivos, envolver(async (req, res
       await client.query(`INSERT INTO seg_archivos (mensaje_id, url, nombre, tipo) VALUES ($1, $2, $3, $4)`, [m.id, s.url, s.nombre, s.tipo]);
     }
     if (texto) await guardarMenciones(client, m.id, pid, texto);
-    const quien = await nombreDe(client, req.usuario.id);
+    quien = await nombreDe(client, req.usuario.id);
     if (decision) await registrar(client, pid, req.usuario.id, 'decision', `${quien}: ${resumirTexto(texto || 'Decisión con imagen adjunta', 300)}`);
     if (subidos.length) {
       const n = subidos.length;
@@ -453,12 +469,76 @@ router.post('/proyectos/:id/mensajes', recibirArchivos, envolver(async (req, res
        ON CONFLICT (usuario_id, proyecto_id) DO UPDATE SET leido_hasta = NOW()`, [req.usuario.id, pid]);
     await client.query('COMMIT');
     res.status(201).json({ id: m.id });
+    // Aviso al celular del resto del equipo (después de responder, sin demorar al que escribe)
+    avisarMensaje({ mensajeId: m.id, pid, autorId: req.usuario.id, quien, texto, subidos, tareaId, decision });
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();
   }
+}));
+
+// ── Avisos push ───────────────────────────────────────────────────────────────
+// Reciben aviso de cada mensaje: el equipo del proyecto y quienes fueron mencionados
+// (con @todos, también los socios). Nunca el que lo escribió.
+async function avisarMensaje({ mensajeId, pid, autorId, quien, texto, subidos, tareaId, decision }) {
+  try {
+    const { rows: dest } = await query(
+      `SELECT usuario_id FROM seg_equipo WHERE proyecto_id = $1
+       UNION SELECT usuario_id FROM seg_menciones WHERE mensaje_id = $2
+       UNION SELECT s.usuario_id FROM socios s, seg_mensajes m
+             WHERE m.id = $2 AND m.todos AND s.activo = TRUE AND s.usuario_id IS NOT NULL`, [pid, mensajeId]);
+    const ids = dest.map(d => d.usuario_id).filter(id => String(id) !== String(autorId));
+    if (!ids.length) return;
+    const { rows: [p] } = await query(`SELECT nombre FROM proyectos WHERE id = $1`, [pid]);
+    let tarea = null;
+    if (tareaId) ({ rows: [tarea] } = await query(`SELECT titulo FROM seg_tareas WHERE id = $1`, [tareaId]));
+    const adjuntos = subidos.length === 1 ? `📎 ${subidos[0].nombre}` : subidos.length ? `📎 ${subidos.length} archivos` : '';
+    let cuerpo = resumirTexto(texto, 180) || adjuntos;
+    if (texto && adjuntos) cuerpo += ` · ${adjuntos}`;
+    if (tarea) cuerpo = `Sobre «${resumirTexto(tarea.titulo, 50)}»: ${cuerpo}`;
+    if (decision) cuerpo = `Decisión: ${cuerpo}`;
+    await push.enviarA(ids, (s) => ({
+      title: `${quien} · ${p?.nombre || 'Proyecto'}`,
+      body: cuerpo,
+      url: `${s.rol === 'admin' ? '/admin/seguimiento' : '/dibujante/proyectos'}/${pid}${tareaId ? `?tarea=${tareaId}` : ''}`,
+      tag: `proyecto-${pid}`,
+    }));
+  } catch (err) {
+    console.error('Error armando aviso push:', err.message);
+  }
+}
+
+router.get('/push/clave', envolver(async (req, res) => {
+  res.json({ clave: await push.clavePublica() });
+}));
+
+// Este dispositivo quiere recibir avisos (si ya estaba, se reasigna al usuario actual)
+router.post('/push/suscribir', envolver(async (req, res) => {
+  const s = req.body?.suscripcion;
+  if (!s?.endpoint || !s?.keys?.p256dh || !s?.keys?.auth || !/^https:\/\//.test(s.endpoint)) {
+    return res.status(400).json({ error: 'Suscripción inválida' });
+  }
+  await query(
+    `INSERT INTO seg_push (usuario_id, endpoint, p256dh, auth, dispositivo) VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (endpoint) DO UPDATE SET usuario_id = EXCLUDED.usuario_id, p256dh = EXCLUDED.p256dh,
+       auth = EXCLUDED.auth, dispositivo = EXCLUDED.dispositivo`,
+    [req.usuario.id, s.endpoint, s.keys.p256dh, s.keys.auth, String(req.headers['user-agent'] || '').slice(0, 300)]);
+  res.json({ ok: true });
+}));
+
+router.post('/push/desuscribir', envolver(async (req, res) => {
+  if (req.body?.endpoint) await query(`DELETE FROM seg_push WHERE endpoint = $1 AND usuario_id = $2`, [req.body.endpoint, req.usuario.id]);
+  res.json({ ok: true });
+}));
+
+// Aviso de prueba a los dispositivos del usuario actual
+router.post('/push/probar', envolver(async (req, res) => {
+  const { rows } = await query(`SELECT COUNT(*)::int AS n FROM seg_push WHERE usuario_id = $1`, [req.usuario.id]);
+  if (!rows[0].n) return res.status(400).json({ error: 'Este usuario no tiene dispositivos con avisos activados' });
+  await push.enviarA([req.usuario.id], { title: 'VJV · Avisos activados', body: 'Así te van a llegar los mensajes de tus proyectos.', url: '/', tag: 'prueba' });
+  res.json({ ok: true, dispositivos: rows[0].n });
 }));
 
 // Cada uno edita o borra sus mensajes; un administrador, los de cualquiera.

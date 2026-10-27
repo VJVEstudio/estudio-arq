@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { post, get, setAccessToken, clearAccessToken, renovarToken } from '../lib/api';
+import { sincronizarPush, olvidarPushEnServidor } from '../lib/push';
 
 const AuthContext = createContext(null);
 
@@ -14,6 +15,7 @@ export function AuthProvider({ children }) {
         // (si se dispara dos veces casi juntas, no se pisan).
         setAccessToken(await renovarToken());
         setUsuario(await get('/auth/me'));
+        sincronizarPush();
       } catch {
         // Sin sesión previa
       } finally {
@@ -30,10 +32,12 @@ export function AuthProvider({ children }) {
     const datos = await post('/auth/login', { email, password });
     setAccessToken(datos.accessToken);
     setUsuario(datos.usuario);
+    sincronizarPush();
     return datos.usuario;
   }, []);
 
   const logout = useCallback(async () => {
+    await olvidarPushEnServidor();
     try { await post('/auth/logout', {}); } catch {}
     clearAccessToken();
     setUsuario(null);

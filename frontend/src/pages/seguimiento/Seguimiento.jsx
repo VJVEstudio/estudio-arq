@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { get } from '../../lib/api';
 import { ETAPAS, SIGLA_ROL, ORDEN_ROL, cuando, primerNombre, participaEn, leerPref, guardarPref } from '../../lib/seguimiento';
 import { useAuth } from '../../context/AuthContext';
-import { Avatar, AZUL } from './comunes';
+import { useEsCelular } from '../../lib/useEsCelular';
+import { Avatar, AZUL, InvitacionAvisos } from './comunes';
 import { AlertaError } from '../../components/ui';
 
 const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
@@ -18,6 +19,7 @@ export default function Seguimiento({ base }) {
   const [buscar, setBuscar] = useState('');
   const [finalizados, setFinalizados] = useState(false);
   const { usuario } = useAuth();
+  const movil = useEsCelular();
   // "Solo mis proyectos": los que tienen al usuario en el equipo. Se recuerda en esta computadora.
   const [soloMios, setSoloMios] = useState(() => leerPref('seguimiento_solo_mios', false));
   const cambiarSoloMios = (v) => { setSoloMios(v); guardarPref('seguimiento_solo_mios', v); };
@@ -45,7 +47,7 @@ export default function Seguimiento({ base }) {
   const totVenc = base_.reduce((s, p) => s + p.vencidas, 0);
 
   return (
-    <div style={{ padding: '20px 24px', maxWidth: 1280 }}>
+    <div style={{ padding: movil ? '10px 8px' : '20px 24px', maxWidth: 1280 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>Seguimiento de proyectos</h1>
@@ -68,10 +70,11 @@ export default function Seguimiento({ base }) {
           </label>
           <input type="search" value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar proyecto o cliente…"
             aria-label="Buscar proyecto o cliente"
-            style={{ padding: '7px 10px', fontSize: 13, border: '1px solid #c9c9c9', borderRadius: 8, background: '#fff', minWidth: 230, fontFamily: 'inherit' }} />
+            style={{ padding: '7px 10px', fontSize: 13, border: '1px solid #c9c9c9', borderRadius: 8, background: '#fff', minWidth: movil ? 0 : 230, width: movil ? '100%' : undefined, boxSizing: 'border-box', fontFamily: 'inherit' }} />
         </div>
       </div>
 
+      <InvitacionAvisos />
       <AlertaError mensaje={error} />
       {cargando ? <p style={{ color: '#666', fontSize: 14 }}>Cargando…</p> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>

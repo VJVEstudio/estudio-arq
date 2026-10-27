@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useEsCelular } from '../lib/useEsCelular';
 import { useAuth } from '../context/AuthContext';
 import { CampanaNotificaciones } from '../pages/seguimiento/comunes';
 
@@ -33,12 +34,13 @@ const NAV = [
   ]},
 ];
 
-function Sidebar({ colapsado, onToggle }) {
+function Sidebar({ colapsado, onToggle, movil = false, onNavegar }) {
   return (
     <aside style={{
       width: colapsado ? 60 : 240, minHeight: '100vh', background: AZUL,
       display: 'flex', flexDirection: 'column', transition: 'width 0.22s ease',
-      flexShrink: 0, position: 'sticky', top: 0, zIndex: 100,
+      flexShrink: 0, top: 0, zIndex: movil ? 400 : 100,
+      ...(movil ? { position: 'fixed', left: 0, bottom: 0, boxShadow: '4px 0 20px rgba(0,0,0,0.25)' } : { position: 'sticky' }),
     }}>
       <div style={{
         padding: colapsado ? '20px 0' : '20px', borderBottom: '1px solid rgba(255,255,255,0.15)',
@@ -54,16 +56,16 @@ function Sidebar({ colapsado, onToggle }) {
             <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>Panel de gestión</p>
           </div>
         )}
-        <button onClick={onToggle} style={{
+        <button onClick={onToggle} aria-label={movil ? 'Cerrar menú' : colapsado ? 'Expandir menú' : 'Achicar menú'} style={{
           background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '6px',
           color: 'white', cursor: 'pointer', padding: '6px 8px',
           fontSize: '14px', lineHeight: 1,
         }}>
-          {colapsado ? '→' : '←'}
+          {movil ? '✕' : colapsado ? '→' : '←'}
         </button>
       </div>
 
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '12px 0' }}>
+      <nav onClick={(e) => { if (e.target.closest('a')) onNavegar?.(); }} style={{ flex: 1, overflowY: 'auto', padding: '12px 0' }}>
         {NAV.map(grupo => (
           <div key={grupo.grupo} style={{ marginBottom: '4px' }}>
             {!colapsado && (
@@ -107,14 +109,20 @@ function Sidebar({ colapsado, onToggle }) {
   );
 }
 
-function Header({ usuario, onLogout }) {
+export const botonMenuMovil = {
+  font: 'inherit', fontSize: 20, lineHeight: 1, width: 38, height: 36, border: '1px solid #e0e0e0', borderRadius: 8,
+  background: '#fff', color: '#333', cursor: 'pointer', marginRight: 'auto',
+};
+
+function Header({ usuario, onLogout, movil, onMenu }) {
   const [menuAbierto, setMenuAbierto] = useState(false);
   return (
     <header style={{
-      height: 56, background: '#fff', borderBottom: '1px solid #e0e0e0',
-      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px',
-      padding: '0 24px', position: 'sticky', top: 0, zIndex: 90,
+      height: movil ? 50 : 56, background: '#fff', borderBottom: '1px solid #e0e0e0',
+      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: movil ? 6 : 12,
+      padding: movil ? '0 10px' : '0 24px', position: 'sticky', top: 0, zIndex: 90,
     }}>
+      {movil && <button type="button" onClick={onMenu} aria-label="Abrir menú" style={botonMenuMovil}>☰</button>}
       <CampanaNotificaciones base="/admin/seguimiento" />
       <div style={{ position: 'relative' }}>
         <button onClick={() => setMenuAbierto(v => !v)} style={{
@@ -128,10 +136,12 @@ function Header({ usuario, onLogout }) {
           }}>
             {usuario?.nombre?.charAt(0)?.toUpperCase()}
           </div>
-          <div style={{ textAlign: 'left' }}>
-            <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>{usuario?.nombre}</p>
-            <p style={{ margin: 0, fontSize: '11px', color: '#666' }}>Administrador</p>
-          </div>
+          {!movil && (
+            <div style={{ textAlign: 'left' }}>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>{usuario?.nombre}</p>
+              <p style={{ margin: 0, fontSize: '11px', color: '#666' }}>Administrador</p>
+            </div>
+          )}
           <span style={{ color: '#999', fontSize: '12px' }}>▾</span>
         </button>
 
@@ -166,6 +176,10 @@ export default function LayoutAdmin() {
   const { usuario, logout } = useAuth();
   const navigate = useNavigate();
   const [colapsado, setColapsado] = useState(false);
+  const movil = useEsCelular();
+  const [menuMovil, setMenuMovil] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => { setMenuMovil(false); }, [pathname, movil]);
 
   const handleLogout = async () => {
     await logout();
@@ -174,9 +188,15 @@ export default function LayoutAdmin() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f5f5f5' }}>
-      <Sidebar colapsado={colapsado} onToggle={() => setColapsado(v => !v)} />
+      {!movil && <Sidebar colapsado={colapsado} onToggle={() => setColapsado(v => !v)} />}
+      {movil && menuMovil && (
+        <>
+          <div onClick={() => setMenuMovil(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 399 }} />
+          <Sidebar colapsado={false} movil onToggle={() => setMenuMovil(false)} onNavegar={() => setMenuMovil(false)} />
+        </>
+      )}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Header usuario={usuario} onLogout={handleLogout} />
+        <Header usuario={usuario} onLogout={handleLogout} movil={movil} onMenu={() => setMenuMovil(true)} />
         <main style={{ flex: 1, overflowY: 'auto' }}>
           <Outlet />
         </main>
