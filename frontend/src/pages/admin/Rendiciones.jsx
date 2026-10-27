@@ -10,11 +10,11 @@ import {
 const AZUL = '#1a2744';
 const TIPOS_HONORARIOS = ['RHDT', 'RHP'];
 
-const fmt = (n, moneda = 'ARS') =>
+export const fmt = (n, moneda = 'ARS') =>
   moneda === 'USD'
     ? `U$S ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtF = (f) => {
+export const fmtF = (f) => {
   if (!f) return '—';
   const fecha = typeof f === 'string' ? f.split('T')[0] : f;
   const d = new Date(fecha + 'T00:00:00');
@@ -28,7 +28,7 @@ const ESTADO_COLORES = {
   enviada:  { bg: '#e3f2fd', color: '#0d47a1', label: 'Enviada' },
 };
 
-function BadgeEstado({ estado }) {
+export function BadgeEstado({ estado }) {
   const cfg = ESTADO_COLORES[estado] || { bg: '#f5f5f5', color: '#333', label: estado };
   return (
     <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, background: cfg.bg, color: cfg.color }}>
@@ -37,9 +37,11 @@ function BadgeEstado({ estado }) {
   );
 }
 
-function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obtenerSiguienteNumero }) {
+// `proyectoFijo` (opcional): crea la rendición para ese proyecto sin mostrar el selector
+// (se usa desde la pestaña Rendiciones del seguimiento de un proyecto).
+export function FormNuevaRendicion({ proyectos = [], proyectoFijo, onGuardar, onCancelar, guardando, obtenerSiguienteNumero }) {
   const [form, setForm] = useState({
-    proyecto_id: '',
+    proyecto_id: proyectoFijo ? String(proyectoFijo.id) : '',
     prefijo: '',
     tipo: 'RO',
     tipoPersonalizado: '',
@@ -80,12 +82,18 @@ function FormNuevaRendicion({ proyectos, onGuardar, onCancelar, guardando, obten
 
   return (
     <form onSubmit={handleSubmit} noValidate>
-      <Campo label="Proyecto / Obra *" error={errores.proyecto_id}>
-        <Select value={form.proyecto_id} onChange={set('proyecto_id')}>
-          <option value="">Seleccioná un proyecto…</option>
-          {proyectos.map(p => <option key={p.id} value={p.id}>{p.cliente_nombre} - {p.nombre}</option>)}
-        </Select>
-      </Campo>
+      {proyectoFijo ? (
+        <p style={{ margin: '0 0 14px', fontSize: '14px' }}>
+          Proyecto: <strong>{proyectoFijo.nombre}</strong>{proyectoFijo.cliente_nombre && <span style={{ color: '#666' }}> · {proyectoFijo.cliente_nombre}</span>}
+        </p>
+      ) : (
+        <Campo label="Proyecto / Obra *" error={errores.proyecto_id}>
+          <Select value={form.proyecto_id} onChange={set('proyecto_id')}>
+            <option value="">Seleccioná un proyecto…</option>
+            {proyectos.map(p => <option key={p.id} value={p.id}>{p.cliente_nombre} - {p.nombre}</option>)}
+          </Select>
+        </Campo>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
         <Campo label="Prefijo (opcional)">
           <Input value={form.prefijo} onChange={set('prefijo')} placeholder="Ej: T, CDI" />
