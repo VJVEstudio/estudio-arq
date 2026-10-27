@@ -9,6 +9,7 @@ import {
 import { Avatar, AZUL, ComentariosTarea, BotonComentarios, LinkDrive } from './comunes';
 import { AlertaError } from '../../components/ui';
 import RendicionesProyecto from './RendicionesProyecto';
+import { useEsCelular } from '../../lib/useEsCelular';
 
 const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
 const input = { padding: '5px 8px', font: 'inherit', fontSize: 13, border: '1px solid #c9c9c9', borderRadius: 6, background: '#fff', color: '#1a1a1a' };
@@ -24,7 +25,7 @@ function vistaTarea(t) {
 }
 
 // ═══════════════════════════════ Grupo ═══════════════════════════════
-function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTareas, irATarea, alternarTarea }) {
+function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTareas, irATarea, alternarTarea, movil }) {
   const [draft, setDraft] = useState('');
   const [decision, setDecision] = useState(false);
   const [archivos, setArchivos] = useState([]);
@@ -137,7 +138,10 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
             <span style={{ fontSize: 12 }}>Fotos, PDF, Word, Excel o DWG · hasta {MAX_MB_ARCHIVO} MB cada uno</span>
           </div>
         )}
-        <div ref={chatRef} style={{ height: 'calc(100vh - 290px)', minHeight: 380, overflowY: 'auto', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 7, fontSize: 13 }}>
+        <div ref={chatRef} style={{
+          ...(movil ? { height: 'calc(100dvh - 268px)', minHeight: 240, padding: '8px 8px' } : { height: 'calc(100vh - 290px)', minHeight: 380, padding: '10px 14px' }),
+          overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7, fontSize: movil ? 14 : 13,
+        }}>
           {!datos.mensajes.length && (
             <p style={{ margin: 'auto', color: '#6b6b6b', textAlign: 'center' }}>Todavía no hay mensajes. Escribí el primero para el grupo.</p>
           )}
@@ -161,8 +165,8 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
             return (
               <div key={m.id}>
                 {separador}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <Avatar id={m.usuario_id} nombre={m.autor} tam={26} />
+                <div style={{ display: 'flex', gap: movil ? 6 : 8, alignItems: 'flex-start' }}>
+                  <Avatar id={m.usuario_id} nombre={m.autor} tam={movil ? 22 : 26} />
                   <div style={{
                     minWidth: 0, flex: 1, borderRadius: 8, padding: '5px 10px',
                     background: m.decision ? '#fffaf0' : esMio ? '#eef2f8' : '#f7f7f7',
@@ -170,7 +174,7 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
                   }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '4px 6px', fontSize: 12 }}>
                       <strong style={{ fontWeight: 600 }}>{m.autor}</strong>
-                      <span style={{ color: '#595959' }}>{rolDe(m.usuario_id) ? `· ${rolDe(m.usuario_id)} ` : ''}· {horaDe(m.created_at)}</span>
+                      <span style={{ color: '#595959' }}>{rolDe(m.usuario_id) && !movil ? `· ${rolDe(m.usuario_id)} ` : ''}· {horaDe(m.created_at)}</span>
                       {m.editado_at && (
                         <span style={{ color: '#6b6b6b', fontStyle: 'italic' }}>
                           {m.editado_por_otro ? `(editado por ${primerNombre(m.editado_por_nombre)})` : '(editado)'}
@@ -183,10 +187,10 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
                         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 2 }}>
                           <button type="button" onClick={() => setEditando({ id: m.id, texto: m.texto || '' })}
                             aria-label={esMio ? 'Editar mi mensaje' : `Editar el mensaje de ${primerNombre(m.autor)}`}
-                            style={{ font: 'inherit', fontSize: 11, padding: '1px 6px', border: 'none', borderRadius: 4, background: 'transparent', color: AZUL, cursor: 'pointer' }}>Editar</button>
+                            style={{ font: 'inherit', fontSize: movil ? 13 : 11, padding: movil ? '0 6px' : '1px 6px', border: 'none', borderRadius: 4, background: 'transparent', color: AZUL, cursor: 'pointer' }}>{movil ? '✎' : 'Editar'}</button>
                           <button type="button" onClick={() => borrar(m)}
                             aria-label={esMio ? 'Borrar mi mensaje' : `Borrar el mensaje de ${primerNombre(m.autor)}`}
-                            style={{ font: 'inherit', fontSize: 11, padding: '1px 6px', border: 'none', borderRadius: 4, background: 'transparent', color: '#b91c1c', cursor: 'pointer' }}>Borrar</button>
+                            style={{ font: 'inherit', fontSize: movil ? 13 : 11, padding: movil ? '0 6px' : '1px 6px', border: 'none', borderRadius: 4, background: 'transparent', color: '#b91c1c', cursor: 'pointer' }}>{movil ? '✕' : 'Borrar'}</button>
                         </span>
                       )}
                     </div>
@@ -238,7 +242,7 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
           })}
         </div>
 
-        <form onSubmit={enviar} style={{ borderTop: '1px solid #e0e0e0', padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <form onSubmit={enviar} style={{ borderTop: '1px solid #e0e0e0', padding: movil ? '6px 8px' : '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           {archivos.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {archivos.map((a, i) => (
@@ -264,8 +268,9 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
               ))}
             </div>
           )}
-          <textarea ref={textoRef} rows={2} value={draft} onChange={e => setDraft(e.target.value)} aria-label="Mensaje para el grupo"
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !sugerencias.length) { e.preventDefault(); enviar(); } }}
+          <textarea ref={textoRef} rows={movil ? 1 : 2} value={draft} onChange={e => setDraft(e.target.value)} aria-label="Mensaje para el grupo"
+            // En el celular Enter baja de línea (como en WhatsApp) y se envía con el botón
+            onKeyDown={e => { if (!movil && e.key === 'Enter' && !e.shiftKey && !sugerencias.length) { e.preventDefault(); enviar(); } }}
             onPaste={e => {
               // Capturas de pantalla pegadas con Ctrl+V: se adjuntan como imagen con nombre y hora
               const imgs = Array.from(e.clipboardData?.files || []).filter(f => f.type.startsWith('image/'));
@@ -276,27 +281,30 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
               const sello = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}.${p2(d.getMinutes())}.${p2(d.getSeconds())}`;
               agregarArchivos(imgs.map((f, i) => new File([f], `Captura ${sello}${imgs.length > 1 ? ` (${i + 1})` : ''}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })));
             }}
-            placeholder="Escribí un mensaje… (Enter envía, Shift+Enter baja de línea). Podés pegar capturas con Ctrl+V o arrastrar archivos acá."
-            style={{ ...input, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 13 }} />
+            placeholder={movil ? 'Mensaje…' : 'Escribí un mensaje… (Enter envía, Shift+Enter baja de línea). Podés pegar capturas con Ctrl+V o arrastrar archivos acá.'}
+            style={{ ...input, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontSize: 13, ...(movil ? { minHeight: 40, maxHeight: 140 } : {}) }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
             <input ref={fileRef} type="file" multiple accept={ACCEPT_ARCHIVOS} hidden
               onChange={e => { agregarArchivos(e.target.files); e.target.value = ''; }} />
-            <button type="button" onClick={() => fileRef.current?.click()} style={btnSec} title="También podés arrastrar los archivos al chat">Adjuntar archivo</button>
-            <button type="button" onClick={mencionar} style={btnSec}><strong>@</strong> Mencionar</button>
+            <button type="button" onClick={() => fileRef.current?.click()} style={movil ? { ...btnSec, fontSize: 14, padding: '6px 10px' } : btnSec}
+              aria-label="Adjuntar archivo o foto" title="También podés arrastrar los archivos al chat">{movil ? '📎 Adjuntar' : 'Adjuntar archivo'}</button>
+            <button type="button" onClick={mencionar} aria-label="Mencionar" style={movil ? { ...btnSec, fontSize: 14, padding: '6px 10px' } : btnSec}><strong>@</strong>{movil ? '' : ' Mencionar'}</button>
             <button type="button" aria-pressed={decision} onClick={() => setDecision(d => !d)} style={{
               ...btnSec, background: decision ? '#fff1d6' : '#fff', borderColor: decision ? '#e0b45c' : '#c9c9c9',
               color: decision ? '#7a4a00' : '#1a1a1a', fontWeight: decision ? 600 : 400,
-            }}>Marcar como decisión</button>
+              ...(movil ? { fontSize: 14, padding: '6px 10px' } : {}),
+            }}>{movil ? 'Decisión' : 'Marcar como decisión'}</button>
             <span style={{ flex: 1 }} />
             <button type="submit" disabled={enviando || (!draft.trim() && !archivos.length)}
-              style={{ ...btnPri, opacity: enviando || (!draft.trim() && !archivos.length) ? 0.5 : 1 }}>
+              style={{ ...btnPri, ...(movil ? { fontSize: 15, padding: '7px 16px' } : {}), opacity: enviando || (!draft.trim() && !archivos.length) ? 0.5 : 1 }}>
               {enviando ? 'Enviando…' : 'Enviar'}
             </button>
           </div>
         </form>
       </section>
 
-      <aside style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* En el celular no van los paneles laterales: las tareas están en su pestaña y los archivos en el chat */}
+      {!movil && <aside style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <section aria-label="Tareas pendientes" style={{ ...caja, padding: '8px 12px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
             <h2 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Pendientes</h2>
@@ -331,13 +339,13 @@ function Grupo({ datos, yo, esAdmin, personas, rolDe, onRecargar, onError, irTar
           </div>
           {!galeria.length && <p style={{ margin: 0, color: '#595959', fontSize: 12 }}>Todavía no se subieron fotos ni archivos.</p>}
         </section>
-      </aside>
+      </aside>}
     </div>
   );
 }
 
 // ═══════════════════════════════ Tareas ═══════════════════════════════
-function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea, tareaAbierta, setTareaAbierta }) {
+function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea, tareaAbierta, setTareaAbierta, movil }) {
   const defResp = (personas.find(p => p.rol === 'Dibujante') || personas.find(p => String(p.usuario_id) === String(yo.id)) || personas[0])?.usuario_id || '';
   const enUnaSemana = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
   const [nt, setNt] = useState({ titulo: '', responsable_id: defResp, fecha_limite: enUnaSemana });
@@ -362,6 +370,26 @@ function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea, tarea
   const comentariosDe = (tid) => datos.mensajes.filter(m => m.tarea_id === tid && !m.borrado_at);
   const filaTarea = (t, hecha) => {
     const abierta = tareaAbierta === t.id;
+    if (movil) return (
+      // En el celular: título arriba; responsable, fecha y comentarios en una línea abajo
+      <div key={t.id} id={`tarea-${t.id}`} style={{ borderBottom: '1px solid #f0f0f0', background: abierta ? '#fbfcfe' : undefined }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '7px 10px', fontSize: 14, color: hecha ? '#595959' : undefined }}>
+          <input type="checkbox" checked={hecha} onChange={() => alternarTarea(t)} aria-label={`Marcar «${t.titulo}» como ${hecha ? 'pendiente' : 'hecha'}`}
+            style={{ width: 20, height: 20, marginTop: 1, accentColor: AZUL, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', lineHeight: 1.3, textDecoration: hecha ? 'line-through' : 'none' }}>{t.titulo}</span>
+            <span style={{ display: 'block', fontSize: 12, marginTop: 1, color: !hecha && t.vencida ? '#b91c1c' : '#595959', fontWeight: !hecha && t.vencida ? 600 : 400 }}>
+              {t.responsable ? primerNombre(t.responsable) : 'Sin responsable'} · {t.fechaTxt}
+            </span>
+          </div>
+          <BotonComentarios cantidad={t.comentarios} abierto={abierta} onClick={() => setTareaAbierta(abierta ? null : t.id)} />
+        </div>
+        {abierta && (
+          <ComentariosTarea proyectoId={datos.proyecto.id} tareaId={t.id} comentarios={comentariosDe(t.id)}
+            onEnviado={onRecargar} onError={onError} autoFocus />
+        )}
+      </div>
+    );
     return (
       <div key={t.id} id={`tarea-${t.id}`} style={{ borderBottom: '1px solid #f0f0f0', background: abierta ? '#fbfcfe' : undefined }}>
         <div style={{ ...fila, color: hecha ? '#595959' : undefined }}>
@@ -390,6 +418,22 @@ function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea, tarea
 
   return (
     <div>
+      {movil ? (
+        // En el celular: una sola línea; responsable y fecha aparecen al escribir
+        <form onSubmit={agregar} style={{ ...caja, padding: '8px 10px', marginBottom: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <input value={nt.titulo} onChange={e => setNt({ ...nt, titulo: e.target.value })} placeholder="+ Nueva tarea…" aria-label="Nueva tarea"
+            style={{ ...input, flex: '1 1 200px', minWidth: 0 }} />
+          {nt.titulo.trim() && (
+            <>
+              <select value={nt.responsable_id} onChange={e => setNt({ ...nt, responsable_id: e.target.value })} aria-label="Responsable" style={{ ...input, flex: '1 1 140px', minWidth: 0 }}>
+                {personas.map(p => <option key={p.usuario_id} value={p.usuario_id}>{p.nombre}</option>)}
+              </select>
+              <input type="date" value={nt.fecha_limite} onChange={e => setNt({ ...nt, fecha_limite: e.target.value })} aria-label="Fecha límite" style={{ ...input, flex: '1 1 130px', minWidth: 0 }} />
+            </>
+          )}
+          <button type="submit" disabled={guardando || !nt.titulo.trim()} style={{ ...btnPri, opacity: guardando || !nt.titulo.trim() ? 0.5 : 1 }}>Agregar</button>
+        </form>
+      ) : (
       <form onSubmit={agregar} style={{ ...caja, padding: '8px 12px', marginBottom: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' }}>
         <label style={{ flex: '3 1 260px', display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, color: '#595959' }}>
           Nueva tarea
@@ -407,6 +451,7 @@ function Tareas({ datos, yo, personas, onRecargar, onError, alternarTarea, tarea
         </label>
         <button type="submit" disabled={guardando || !nt.titulo.trim()} style={{ ...btnPri, opacity: guardando || !nt.titulo.trim() ? 0.5 : 1 }}>Agregar</button>
       </form>
+      )}
 
       <section aria-label="Tareas pendientes" style={{ ...caja, overflow: 'hidden', marginBottom: 8 }}>
         <h2 style={tituloCaja}>Pendientes ({pendientes.length})</h2>
@@ -594,6 +639,7 @@ export default function ProyectoSeguimiento({ base }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { usuario, esAdmin } = useAuth();
+  const movil = useEsCelular();
   const [datos, setDatos] = useState(null);
   const [usuarios, setUsuarios] = useState([]);
   const [error, setError] = useState('');
@@ -667,11 +713,29 @@ export default function ProyectoSeguimiento({ base }) {
     { k: 'historial', label: 'Historial' },
     ...(esAdmin ? [{ k: 'rendiciones', label: rend.cargando ? 'Rendiciones' : `Rendiciones (${rend.lista.length})` }] : []),
   ];
-  const comunes = { datos, yo: usuario, esAdmin, personas, rolDe, onRecargar: cargar, onError: setError, alternarTarea };
+  const comunes = { datos, yo: usuario, esAdmin, personas, rolDe, onRecargar: cargar, onError: setError, alternarTarea, movil };
 
   return (
-    <div style={{ padding: '14px 20px 20px', maxWidth: 1280 }}>
-      {/* Cabecera compacta: lo justo para ubicarse; el detalle del equipo está en la pestaña Equipo */}
+    <div style={{ padding: movil ? '6px 6px 8px' : '14px 20px 20px', maxWidth: 1280 }}>
+      {movil ? (
+        // Cabecera para celular: dos líneas bien compactas
+        <div style={{ ...caja, padding: '5px 8px', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <button type="button" onClick={() => navigate(base)} aria-label="Volver a todos los proyectos"
+              style={{ font: 'inherit', fontSize: 16, color: AZUL, background: 'transparent', border: '1px solid #d6d9df', padding: '2px 9px', borderRadius: 6, cursor: 'pointer', flexShrink: 0 }}>←</button>
+            <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {datos.proyecto.nombre} <span style={{ fontSize: 12, fontWeight: 400, color: '#595959' }}>{datos.proyecto.cliente_nombre}</span>
+            </h1>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
+            <select value={datos.proyecto.etapa} onChange={cambiarEtapa} aria-label="Etapa" style={{ ...input, padding: '2px 4px', maxWidth: 170 }}>
+              {ETAPAS.map((e, i) => <option key={e} value={i}>{e}</option>)}
+            </select>
+            <span style={{ flex: 1, minWidth: 0 }}><LinkDrive proyectoId={datos.proyecto.id} url={datos.proyecto.drive_url} onGuardado={cargar} onError={setError} /></span>
+          </div>
+        </div>
+      ) : (
+      /* Cabecera compacta: lo justo para ubicarse; el detalle del equipo está en la pestaña Equipo */
       <div style={{ ...caja, padding: '7px 12px', marginBottom: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 16px' }}>
         <button type="button" onClick={() => navigate(base)} aria-label="Volver a todos los proyectos"
           style={{ font: 'inherit', fontSize: 13, color: AZUL, background: 'transparent', border: '1px solid #d6d9df', padding: '4px 9px', borderRadius: 6, cursor: 'pointer' }}>← Proyectos</button>
@@ -697,12 +761,17 @@ export default function ProyectoSeguimiento({ base }) {
           </select>
         </label>
       </div>
+      )}
 
-      <div role="tablist" aria-label="Secciones del proyecto" style={{ display: 'flex', gap: 2, borderBottom: '1px solid #e0e0e0', marginBottom: 10, flexWrap: 'wrap' }}>
+      <div role="tablist" aria-label="Secciones del proyecto" style={{
+        display: 'flex', gap: 2, borderBottom: '1px solid #e0e0e0', marginBottom: movil ? 6 : 10,
+        ...(movil ? { flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none' } : { flexWrap: 'wrap' }),
+      }}>
         {tabs.map(t => (
           <button key={t.k} type="button" role="tab" aria-selected={tab === t.k} onClick={() => setTab(t.k)} style={{
             font: 'inherit', fontSize: 13, background: 'none', border: 'none', borderBottom: `3px solid ${tab === t.k ? AZUL : 'transparent'}`,
-            color: tab === t.k ? '#1a1a1a' : '#595959', fontWeight: tab === t.k ? 600 : 400, padding: '6px 12px 5px', cursor: 'pointer', marginBottom: -1,
+            color: tab === t.k ? '#1a1a1a' : '#595959', fontWeight: tab === t.k ? 600 : 400, padding: movil ? '5px 10px 4px' : '6px 12px 5px', cursor: 'pointer', marginBottom: -1,
+            whiteSpace: 'nowrap', flexShrink: 0,
           }}>{t.label}</button>
         ))}
       </div>

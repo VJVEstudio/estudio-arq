@@ -3,7 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Estudio de Arquitectura</title>
+    <title>VJV Arquitectos</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="/icono-192.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#1a2744" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="VJV" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <style>
       * {
         box-sizing: border-box;
@@ -15,6 +23,10 @@
           Oxygen, Ubuntu, sans-serif;
         background: #f5f5f5;
         color: #1a1a1a;
+      }
+      /* En el celular: los campos a 16 px para que el iPhone no haga zoom al escribir */
+      @media (max-width: 760px) {
+        input, textarea, select { font-size: 16px !important; }
       }
       --color-background-primary: #ffffff;
       --color-background-secondary: #f5f5f5;
