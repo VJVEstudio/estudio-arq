@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { post, get, setAccessToken, clearAccessToken } from '../lib/api';
+import { post, get, setAccessToken, clearAccessToken, renovarToken } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -10,16 +10,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const inicializar = async () => {
       try {
-        const res = await fetch(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:4000/api'}/auth/refresh`,
-          { method: 'POST', credentials: 'include' }
-        );
-        if (res.ok) {
-          const { accessToken } = await res.json();
-          setAccessToken(accessToken);
-          const me = await get('/auth/me');
-          setUsuario(me);
-        }
+        // Se usa la misma renovación compartida que el resto de la app
+        // (si se dispara dos veces casi juntas, no se pisan).
+        setAccessToken(await renovarToken());
+        setUsuario(await get('/auth/me'));
       } catch {
         // Sin sesión previa
       } finally {

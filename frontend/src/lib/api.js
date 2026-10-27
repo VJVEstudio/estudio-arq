@@ -7,7 +7,10 @@ export function setAccessToken(token) { accessToken = token; }
 export function clearAccessToken() { accessToken = null; }
 export function getAccessToken() { return accessToken; }
 
-async function renovarToken() {
+// Una sola renovación a la vez: si llegan varias juntas, comparten la misma.
+// (El backend invalida el refresh token usado, así que dos renovaciones en paralelo
+// hacían que la segunda fallara y cerrara la sesión.)
+export async function renovarToken() {
   if (renovando) return renovando;
   renovando = (async () => {
     // Pequeño margen para agrupar renovaciones que lleguen casi al mismo tiempo

@@ -8,6 +8,7 @@ import {
 } from '../../lib/seguimiento';
 import { Avatar, AZUL, ComentariosTarea, BotonComentarios, LinkDrive } from './comunes';
 import { AlertaError } from '../../components/ui';
+import RendicionesProyecto from './RendicionesProyecto';
 
 const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
 const input = { padding: '5px 8px', font: 'inherit', fontSize: 13, border: '1px solid #c9c9c9', borderRadius: 6, background: '#fff', color: '#1a1a1a' };
@@ -599,6 +600,14 @@ export default function ProyectoSeguimiento({ base }) {
   const [tab, setTab] = useState('grupo');
   const [tareaAbierta, setTareaAbierta] = useState(null);
   const [params, setParams] = useSearchParams();
+  // Rendiciones del proyecto (solo administradores: la sección Rendiciones es de administración)
+  const [rend, setRend] = useState({ lista: [], cargando: true, error: '' });
+  const cargarRendiciones = useCallback(async () => {
+    if (!esAdmin) return;
+    try { setRend({ lista: await get(`/rendiciones?proyecto_id=${id}`), cargando: false, error: '' }); }
+    catch (err) { setRend(r => ({ ...r, cargando: false, error: err.message })); }
+  }, [id, esAdmin]);
+  useEffect(() => { setRend({ lista: [], cargando: true, error: '' }); cargarRendiciones(); }, [cargarRendiciones]);
 
   const cargar = useCallback(async (marcarLeido = false) => {
     try {
@@ -656,6 +665,7 @@ export default function ProyectoSeguimiento({ base }) {
     { k: 'tareas', label: `Tareas (${pendientes})` },
     { k: 'equipo', label: 'Equipo' },
     { k: 'historial', label: 'Historial' },
+    ...(esAdmin ? [{ k: 'rendiciones', label: rend.cargando ? 'Rendiciones' : `Rendiciones (${rend.lista.length})` }] : []),
   ];
   const comunes = { datos, yo: usuario, esAdmin, personas, rolDe, onRecargar: cargar, onError: setError, alternarTarea };
 
@@ -703,6 +713,9 @@ export default function ProyectoSeguimiento({ base }) {
       {tab === 'tareas' && <Tareas {...comunes} tareaAbierta={tareaAbierta} setTareaAbierta={setTareaAbierta} />}
       {tab === 'equipo' && <Equipo datos={datos} usuarios={usuarios} onRecargar={cargar} onError={setError} />}
       {tab === 'historial' && <Historial datos={datos} esAdmin={esAdmin} />}
+      {tab === 'rendiciones' && esAdmin && (
+        <RendicionesProyecto proyecto={datos.proyecto} rendiciones={rend.lista} cargando={rend.cargando} error={rend.error} onRecargar={cargarRendiciones} />
+      )}
     </div>
   );
 }
