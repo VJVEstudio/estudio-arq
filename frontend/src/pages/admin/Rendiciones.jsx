@@ -6,6 +6,7 @@ import {
   EncabezadoSeccion, Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, AlertaError, Buscador,
 } from '../../components/ui';
+import ModalMoverRendiciones from './ModalMoverRendiciones';
 
 const AZUL = '#1a2744';
 const TIPOS_HONORARIOS = ['RHDT', 'RHP'];
@@ -156,7 +157,11 @@ export default function Rendiciones() {
     get('/proyectos').then(setProyectos).catch(() => {});
   }, []);
 
-  const { rendiciones, cargando, error, crear, eliminar, obtenerSiguienteNumero } = useRendiciones(filtros);
+  const { rendiciones, cargando, error, crear, eliminar, obtenerSiguienteNumero, cargar } = useRendiciones(filtros);
+  // Rendiciones tildadas para pasarlas a otro proyecto
+  const [elegidas, setElegidas] = useState([]);
+  const [aviso, setAviso] = useState('');
+  const alternar = (id) => setElegidas(e => e.includes(id) ? e.filter(x => x !== id) : [...e, id]);
   const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
   const prefijosDisponibles = useMemo(() => [...new Set(
     rendiciones.map(r => r.tipo.includes('-') ? r.tipo.split('-')[0] : null).filter(Boolean)
@@ -206,6 +211,9 @@ export default function Rendiciones() {
   const OPCIONES_ORDEN = { fecha_desc: { campo: 'fecha', dir: 'desc' }, fecha_asc: { campo: 'fecha', dir: 'asc' }, rendicion_asc: { campo: 'rendicion', dir: 'asc' } };
 
   const idsKey = rendicionesFiltradas.map(r => r.id).join(',');
+  // Solo cuentan las tildadas que siguen visibles con los filtros actuales
+  const elegidasVisibles = elegidas.filter(id => rendicionesFiltradas.some(r => r.id === id));
+  const todasElegidas = rendicionesFiltradas.length > 0 && elegidasVisibles.length === rendicionesFiltradas.length;
 
   useEffect(() => {
     if (!idsKey) { setTotales([]); return; }
@@ -318,19 +326,39 @@ export default function Rendiciones() {
         </div>
       )}
 
+      {aviso && (
+        <div role="status" style={{ background: '#e8f5e9', border: '1px solid #b7dfba', color: '#1b5e20', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <span>{aviso}</span>
+          <button type="button" onClick={() => setAviso('')} aria-label="Cerrar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 15, color: '#1b5e20' }}>×</button>
+        </div>
+      )}
+      {elegidasVisibles.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#f0f4ff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13, color: AZUL }}>
+          <strong>{elegidasVisibles.length === 1 ? '1 rendición elegida' : `${elegidasVisibles.length} rendiciones elegidas`}</strong>
+          <Boton onClick={() => setModal('mover')} style={{ padding: '5px 12px', fontSize: 13 }}>Cambiar de proyecto…</Boton>
+          <Boton variante="secundario" onClick={() => setElegidas([])} style={{ padding: '5px 12px', fontSize: 13 }}>Quitar selección</Boton>
+        </div>
+      )}
       {cargando ? <p style={{ color: '#666', fontSize: '14px' }}>Cargando…</p>
       : error ? <AlertaError mensaje={error} />
       : (
         <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
           <Tabla
-            columnas={['Rendición', 'Cliente', 'Proyecto', 'Fecha', 'Comprobantes', 'Total ARS', 'Total USD', 'Estado', '']}
-            ordenable={['rendicion', 'cliente', 'proyecto', 'fecha', 'comprobantes', 'total_ars', 'total_usd', 'estado', null]}
+            columnas={[
+              <input key="todas" type="checkbox" aria-label="Elegir todas las rendiciones visibles" checked={todasElegidas}
+                onChange={() => setElegidas(todasElegidas ? [] : rendicionesFiltradas.map(r => r.id))} style={{ width: 15, height: 15, accentColor: AZUL }} />,
+              'Rendición', 'Cliente', 'Proyecto', 'Fecha', 'Comprobantes', 'Total ARS', 'Total USD', 'Estado', '']}
+            ordenable={[null, 'rendicion', 'cliente', 'proyecto', 'fecha', 'comprobantes', 'total_ars', 'total_usd', 'estado', null]}
             orden={orden}
             onOrdenar={ordenarPor}
             datos={rendicionesFiltradas}
             vacio="No hay rendiciones. Creá la primera."
             renderFila={(r) => (
               <Fila key={r.id} onClick={() => navigate(`/admin/rendiciones/${r.id}`)}>
+                <Celda style={{ width: 28, padding: '12px 4px 12px 14px' }}>
+                  <input type="checkbox" checked={elegidas.includes(r.id)} aria-label={`Elegir ${r.tipo}${r.numero}`}
+                    onClick={e => e.stopPropagation()} onChange={() => alternar(r.id)} style={{ width: 15, height: 15, accentColor: AZUL, cursor: 'pointer' }} />
+                </Celda>
                 <Celda>
                   <span style={{ fontWeight: 600, color: AZUL }}>{r.tipo}{r.numero}</span>
                   {r.es_honorarios && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#e3f2fd', color: '#0d47a1', borderRadius: '10px', padding: '1px 6px' }}>Honorarios</span>}
@@ -360,7 +388,16 @@ export default function Rendiciones() {
         </Modal>
       )}
 
-      {modal && modal !== 'crear' && (
+      {modal === 'mover' && (
+        <ModalMoverRendiciones ids={elegidasVisibles} onCerrar={cerrarModal}
+          onMovidas={async (r) => {
+            cerrarModal(); setElegidas([]);
+            setAviso(`Listo: ${r.rendiciones.map(x => `${x.antes} → ${x.despues}`).join(', ')} ahora ${r.rendiciones.length > 1 ? 'están' : 'está'} en ${r.proyecto.nombre}.`);
+            await cargar();
+          }} />
+      )}
+
+      {modal && modal !== 'crear' && modal !== 'mover' && (
         <Modal titulo="Eliminar rendición" onCerrar={cerrarModal} ancho={440}>
           <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
           <p style={{ fontSize: '14px', marginBottom: '8px' }}>
