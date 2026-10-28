@@ -6,7 +6,7 @@ import {
   EncabezadoSeccion, Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, AlertaError, Buscador,
 } from '../../components/ui';
-import ModalMoverRendiciones from './ModalMoverRendiciones';
+import ModalMoverRendiciones, { deshacerMovimiento } from './ModalMoverRendiciones';
 
 const AZUL = '#1a2744';
 const TIPOS_HONORARIOS = ['RHDT', 'RHP'];
@@ -161,6 +161,15 @@ export default function Rendiciones() {
   // Rendiciones tildadas para pasarlas a otro proyecto
   const [elegidas, setElegidas] = useState([]);
   const [aviso, setAviso] = useState('');
+  const [ultimoMovimiento, setUltimoMovimiento] = useState(null);
+  const deshacer = async () => {
+    try {
+      await deshacerMovimiento(ultimoMovimiento);
+      setAviso(`Deshecho: ${ultimoMovimiento.rendiciones.map(x => `${x.antes}`).join(', ')} ${ultimoMovimiento.rendiciones.length > 1 ? 'volvieron' : 'volvió'} a ${[...new Set(ultimoMovimiento.rendiciones.map(x => x.proyecto_origen))].join(', ')}.`);
+      setUltimoMovimiento(null);
+      await cargar();
+    } catch (err) { setAviso(`No se pudo deshacer: ${err.message}`); }
+  };
   const alternar = (id) => setElegidas(e => e.includes(id) ? e.filter(x => x !== id) : [...e, id]);
   const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
   const prefijosDisponibles = useMemo(() => [...new Set(
@@ -329,7 +338,8 @@ export default function Rendiciones() {
       {aviso && (
         <div role="status" style={{ background: '#e8f5e9', border: '1px solid #b7dfba', color: '#1b5e20', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
           <span>{aviso}</span>
-          <button type="button" onClick={() => setAviso('')} aria-label="Cerrar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 15, color: '#1b5e20' }}>×</button>
+          {ultimoMovimiento && <Boton variante="secundario" onClick={deshacer} style={{ padding: '2px 10px', fontSize: 12, marginLeft: 'auto' }}>Deshacer</Boton>}
+          <button type="button" onClick={() => { setAviso(''); setUltimoMovimiento(null); }} aria-label="Cerrar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 15, color: '#1b5e20' }}>×</button>
         </div>
       )}
       {elegidasVisibles.length > 0 && (
@@ -390,9 +400,10 @@ export default function Rendiciones() {
 
       {modal === 'mover' && (
         <ModalMoverRendiciones ids={elegidasVisibles} onCerrar={cerrarModal}
+          proyectoActualId={(() => { const ps = [...new Set(rendiciones.filter(r => elegidasVisibles.includes(r.id)).map(r => String(r.proyecto_id)))]; return ps.length === 1 ? ps[0] : null; })()}
           onMovidas={async (r) => {
-            cerrarModal(); setElegidas([]);
-            setAviso(`Listo: ${r.rendiciones.map(x => `${x.antes} → ${x.despues}`).join(', ')} ahora ${r.rendiciones.length > 1 ? 'están' : 'está'} en ${r.proyecto.nombre}.`);
+            cerrarModal(); setElegidas([]); setUltimoMovimiento(r);
+            setAviso(`Listo: ${r.rendiciones.map(x => `${x.antes} → ${x.despues}`).join(', ')} en ${r.proyecto.nombre}.`);
             await cargar();
           }} />
       )}
