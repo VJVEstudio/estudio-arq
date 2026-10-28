@@ -6,6 +6,7 @@ import {
   Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, AlertaError,
 } from '../../components/ui';
+import ModalMoverRendiciones from './ModalMoverRendiciones';
 
 const AZUL = '#1a2744';
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
@@ -174,6 +175,7 @@ function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, gua
 
 // ── Rendición de Honorarios DT/HP ────────────────────────────────────────────
 function RendicionHonorarios({ rendicion, id, cargar }) {
+  const [moverAbierto, setMoverAbierto] = useState(false);
   const navigate = useNavigate();
   const [honorarios, setHonorarios] = useState({ bases: [], socios: [] });
   const [pct, setPct] = useState(rendicion.porcentaje_honorarios || '');
@@ -258,8 +260,15 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
           <p style={{ margin: '6px 0 0', fontSize: '14px', color: '#666' }}>{rendicion.cliente_nombre} — {rendicion.proyecto_nombre}</p>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#999' }}>{fmtF(rendicion.fecha)}</p>
         </div>
-        <Boton variante="secundario" onClick={handleExportarPDF}>⬇ Exportar PDF</Boton>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Boton variante="secundario" onClick={() => setMoverAbierto(true)}>Cambiar de proyecto</Boton>
+          <Boton variante="secundario" onClick={handleExportarPDF}>⬇ Exportar PDF</Boton>
+        </div>
       </div>
+      {moverAbierto && (
+        <ModalMoverRendiciones ids={[id]} proyectoActualId={rendicion.proyecto_id} onCerrar={() => setMoverAbierto(false)}
+          onMovidas={async () => { setMoverAbierto(false); await cargar(); }} />
+      )}
 
       <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
 
@@ -423,6 +432,7 @@ export default function RendicionDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { rendicion, cargando, error, agregarComprobante, actualizarComprobante, eliminarComprobante, cargar } = useRendicion(id);
+  const [moverAbierto, setMoverAbierto] = useState(false);
   const [modal, setModal] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
@@ -473,10 +483,15 @@ export default function RendicionDetalle() {
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#999' }}>{fmtF(rendicion.fecha)}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
+          <Boton variante="secundario" onClick={() => setMoverAbierto(true)}>Cambiar de proyecto</Boton>
           <Boton variante="secundario" onClick={handleExportarPDF}>⬇ Exportar PDF</Boton>
           <Boton onClick={() => setModal('crear')}>+ Agregar comprobante</Boton>
         </div>
       </div>
+      {moverAbierto && (
+        <ModalMoverRendiciones ids={[id]} proyectoActualId={rendicion.proyecto_id} onCerrar={() => setMoverAbierto(false)}
+          onMovidas={async () => { setMoverAbierto(false); await cargar(); }} />
+      )}
 
       <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
 
