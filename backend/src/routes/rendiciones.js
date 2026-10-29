@@ -288,11 +288,11 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/rendiciones/mover  { ids: [...], proyecto_id, numeros: { id: n }, simular }
-// Pasa una o varias rendiciones a otro proyecto.
-// Cada una CONSERVA su número (RV3 sigue siendo RV3) si está libre en el destino; si no,
-// toma el primer número libre de su tipo (el hueco que haya). Así, devolver una rendición
-// a su proyecto de origen le devuelve su número original. Con `numeros` se fija el número
-// de cada una (lo usa "Deshacer").
+// Pasa una o varias rendiciones a otro proyecto. Cada una toma el primer número libre de
+// su tipo en el destino (en orden): si no hay huecos es el siguiente, y si hay un hueco
+// —por ejemplo el que dejó al irse— lo ocupa. Así, devolver una rendición a su proyecto
+// de origen le devuelve su número original. Con `numeros` se fija el número de cada una
+// (lo usa "Deshacer").
 // Con `simular` solo devuelve cómo quedaría, sin cambiar nada.
 router.post('/mover', async (req, res) => {
   const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(String))];
@@ -346,7 +346,7 @@ router.post('/mover', async (req, res) => {
     }
     const siguienteLibre = (t) => { let n = 1; while (ocupados[t].has(n)) n++; return n; };
     const resultado = [];
-    // Primero los números elegidos a mano, después los que conservan el suyo, al final los demás
+    // Primero los números fijados (Deshacer), después los demás en orden
     const elegido = (r) => pedidos[r.id] !== undefined ? Number(pedidos[r.id]) : null;
     const orden = [...rends].sort((a, b) => (elegido(a) === null) - (elegido(b) === null));
     const asignado = {};
@@ -357,14 +357,9 @@ router.post('/mover', async (req, res) => {
         asignado[r.id] = pedido; ocupados[r.tipo].add(pedido);
       }
     }
-    for (const r of orden) {
-      if (asignado[r.id] !== undefined) continue;
-      const n = ocupados[r.tipo].has(Number(r.numero)) ? null : Number(r.numero);
-      if (n !== null) { asignado[r.id] = n; ocupados[r.tipo].add(n); }
-    }
     for (const r of rends) {
       if (asignado[r.id] !== undefined) continue;
-      // Si su número está tomado: el primer número libre (en orden, para respetar la secuencia)
+      // El primer número libre (en orden, para respetar la secuencia)
       const n = siguienteLibre(r.tipo);
       asignado[r.id] = n; ocupados[r.tipo].add(n);
     }
