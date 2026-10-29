@@ -287,60 +287,101 @@ router.get('/:id', async (req, res) => {
   res.json({ ...rendicion, comprobantes });
 });
 
-// POST /api/rendiciones/mover  { ids: [...], proyecto_id, simular }
-// Pasa una o varias rendiciones a otro proyecto. Como la numeración es por proyecto y
-// tipo, cada una toma el número siguiente de su tipo en el proyecto destino (en el
-// orden en que estaban). Con `simular` solo devuelve cómo quedaría, sin cambiar nada.
+// POST /api/rendiciones/mover  { ids: [...], proyecto_id, numeros: { id: n }, simular }
+// Pasa una o varias rendiciones a otro proyecto. Cada una toma el primer número libre de
+// su tipo en el destino (en orden): si no hay huecos es el siguiente, y si hay un hueco
+// —por ejemplo el que dejó al irse— lo ocupa. Así, devolver una rendición a su proyecto
+// de origen le devuelve su número original. Con `numeros` se fija el número de cada una
+// (lo usa "Deshacer").
+// Con `simular` solo devuelve cómo quedaría, sin cambiar nada.
 router.post('/mover', async (req, res) => {
   const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(String))];
   const destino = req.body?.proyecto_id;
   const simular = Boolean(req.body?.simular);
+  const pedidos = req.body?.numeros && typeof req.body.numeros === 'object' ? req.body.numeros : {};
   if (!ids.length) return res.status(400).json({ error: 'Elegí al menos una rendición' });
   if (!destino) return res.status(400).json({ error: 'Elegí el proyecto destino' });
+  for (const [id, n] of Object.entries(pedidos)) {
+    if (n === '' || n === null || n === undefined) { delete pedidos[id]; continue; }
+    if (!Number.isInteger(Number(n)) || Number(n) < 1) return res.status(400).json({ error: 'Los números tienen que ser enteros mayores que cero' });
+  }
   const client = await pool.connect();
+  const fallar = async (codigo, error) => { await client.query('ROLLBACK'); res.status(codigo).json({ error }); };
   try {
     await client.query('BEGIN');
     const { rows: [proy] } = await client.query(
       `SELECT p.id, p.nombre, c.nombre_razon_social AS cliente_nombre FROM proyectos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = $1`, [destino]);
-    if (!proy) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Proyecto destino no encontrado' }); }
+    if (!proy) return fallar(404, 'Proyecto destino no encontrado');
     const { rows: rends } = await client.query(
       `SELECT r.id, r.tipo, r.numero, r.proyecto_id, p.nombre AS proyecto_nombre
        FROM rendiciones r JOIN proyectos p ON p.id = r.proyecto_id
        WHERE r.id::text = ANY($1::text[]) ORDER BY r.tipo, r.numero FOR UPDATE OF r`, [ids]);
-    if (rends.length !== ids.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Alguna de las rendiciones no existe' }); }
-    const yaEstan = rends.filter(r => String(r.proyecto_id) === String(destino));
-    if (yaEstan.length) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: `${yaEstan.map(r => r.tipo + r.numero).join(', ')} ya ${yaEstan.length > 1 ? 'están' : 'está'} en ${proy.nombre}` });
-    }
+    if (rends.length !== ids.length) return fallar(404, 'Alguna de las rendiciones no existe');
     // Rendiciones de honorarios vinculadas: si se mueve una y no la otra, quedarían
     // repartidas entre proyectos distintos. Se pide moverlas juntas o desvincularlas.
     const { rows: vinculos } = await client.query(
       `SELECT rh.tipo || rh.numero AS honorarios, rb.tipo || rb.numero AS base,
+              rh.proyecto_id::text AS proy_h, rb.proyecto_id::text AS proy_b,
               (rhb.rendicion_id::text = ANY($1::text[])) AS mueve_h, (rhb.rendicion_base_id::text = ANY($1::text[])) AS mueve_b
        FROM rendicion_honorarios_base rhb
        JOIN rendiciones rh ON rh.id = rhb.rendicion_id
        JOIN rendiciones rb ON rb.id = rhb.rendicion_base_id
        WHERE rhb.rendicion_id::text = ANY($1::text[]) OR rhb.rendicion_base_id::text = ANY($1::text[])`, [ids]);
-    const sueltos = vinculos.filter(v => v.mueve_h !== v.mueve_b);
+    const sueltos = vinculos.filter(v => {
+      const finalH = v.mueve_h ? String(destino) : v.proy_h;
+      const finalB = v.mueve_b ? String(destino) : v.proy_b;
+      return finalH !== finalB;
+    });
     if (sueltos.length) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: `Hay rendiciones de honorarios vinculadas: ${sueltos.map(v => `${v.honorarios} usa ${v.base}`).join('; ')}. Mové las dos juntas o quitá el vínculo primero.` });
+      return fallar(400, `Hay rendiciones de honorarios vinculadas: ${sueltos.map(v => `${v.honorarios} usa ${v.base}`).join('; ')}. Mové las dos juntas o quitá el vínculo primero.`);
     }
-    // Número siguiente por tipo en el destino
-    const siguiente = {};
+    // Números ya ocupados en el destino por rendiciones que NO se están moviendo
+    const tipos = [...new Set(rends.map(r => r.tipo))];
+    const ocupados = {};
+    for (const t of tipos) {
+      await client.query(`SELECT id FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 FOR UPDATE`, [destino, t]);
+      const { rows } = await client.query(
+        `SELECT numero FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 AND NOT (id::text = ANY($3::text[]))`, [destino, t, ids]);
+      ocupados[t] = new Set(rows.map(x => Number(x.numero)));
+    }
+    const siguienteLibre = (t) => { let n = 1; while (ocupados[t].has(n)) n++; return n; };
     const resultado = [];
-    for (const r of rends) {
-      if (siguiente[r.tipo] === undefined) {
-        await client.query(`SELECT id FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2 FOR UPDATE`, [destino, r.tipo]);
-        const { rows: [n] } = await client.query(
-          `SELECT COALESCE(MAX(numero), 0) + 1 AS s FROM rendiciones WHERE proyecto_id = $1 AND tipo = $2`, [destino, r.tipo]);
-        siguiente[r.tipo] = Number(n.s);
+    // Primero los números fijados (Deshacer), después los demás en orden
+    const elegido = (r) => pedidos[r.id] !== undefined ? Number(pedidos[r.id]) : null;
+    const orden = [...rends].sort((a, b) => (elegido(a) === null) - (elegido(b) === null));
+    const asignado = {};
+    for (const r of orden) {
+      const pedido = elegido(r);
+      if (pedido !== null) {
+        if (ocupados[r.tipo].has(pedido)) return fallar(400, `${r.tipo}${pedido} ya existe en ${proy.nombre}. Elegí otro número.`);
+        asignado[r.id] = pedido; ocupados[r.tipo].add(pedido);
       }
-      const numero = siguiente[r.tipo]++;
-      resultado.push({ id: r.id, antes: `${r.tipo}${r.numero}`, despues: `${r.tipo}${numero}`, proyecto_origen: r.proyecto_nombre });
-      if (!simular) {
-        await client.query(`UPDATE rendiciones SET proyecto_id = $1, numero = $2, updated_at = NOW() WHERE id = $3`, [destino, numero, r.id]);
+    }
+    for (const r of rends) {
+      if (asignado[r.id] !== undefined) continue;
+      // El primer número libre (en orden, para respetar la secuencia)
+      const n = siguienteLibre(r.tipo);
+      asignado[r.id] = n; ocupados[r.tipo].add(n);
+    }
+    for (const r of rends) {
+      const n = asignado[r.id];
+      const mismo = String(r.proyecto_id) === String(destino);
+      resultado.push({
+        id: r.id, tipo: r.tipo, numero_actual: Number(r.numero), numero: n,
+        antes: `${r.tipo}${r.numero}`, despues: `${r.tipo}${n}`,
+        proyecto_origen: r.proyecto_nombre, proyecto_origen_id: r.proyecto_id, mismo_proyecto: mismo,
+        conserva: n === Number(r.numero),
+      });
+    }
+    const sinCambios = resultado.filter(x => x.mismo_proyecto && x.conserva);
+    if (sinCambios.length === resultado.length && !simular) {
+      return fallar(400, 'No hay nada que cambiar: quedan en el mismo proyecto y con el mismo número.');
+    }
+    if (!simular) {
+      // Primero números provisorios (altos) para no chocar entre ellas al intercambiar
+      for (const r of rends) await client.query(`UPDATE rendiciones SET numero = $1 WHERE id = $2`, [Number(r.numero) + 1000000, r.id]);
+      for (const r of rends) {
+        await client.query(`UPDATE rendiciones SET proyecto_id = $1, numero = $2, updated_at = NOW() WHERE id = $3`, [destino, asignado[r.id], r.id]);
       }
     }
     await client.query(simular ? 'ROLLBACK' : 'COMMIT');

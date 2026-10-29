@@ -6,7 +6,7 @@ import {
   Boton, Tabla, Fila, Celda,
   Modal, Campo, Input, Select, AlertaError,
 } from '../../components/ui';
-import ModalMoverRendiciones from './ModalMoverRendiciones';
+import ModalMoverRendiciones, { deshacerMovimiento } from './ModalMoverRendiciones';
 
 const AZUL = '#1a2744';
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
@@ -176,6 +176,7 @@ function FormComprobante({ inicial = {}, rendicionId, onGuardar, onCancelar, gua
 // ── Rendición de Honorarios DT/HP ────────────────────────────────────────────
 function RendicionHonorarios({ rendicion, id, cargar }) {
   const [moverAbierto, setMoverAbierto] = useState(false);
+  const [movida, setMovida] = useState(null);
   const navigate = useNavigate();
   const [honorarios, setHonorarios] = useState({ bases: [], socios: [] });
   const [pct, setPct] = useState(rendicion.porcentaje_honorarios || '');
@@ -267,7 +268,10 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
       </div>
       {moverAbierto && (
         <ModalMoverRendiciones ids={[id]} proyectoActualId={rendicion.proyecto_id} onCerrar={() => setMoverAbierto(false)}
-          onMovidas={async () => { setMoverAbierto(false); await cargar(); }} />
+          onMovidas={async (r) => { setMoverAbierto(false); setMovida(r); await cargar(); }} />
+      )}
+      {movida && (
+        <AvisoMovida movida={movida} onDeshecho={async () => { setMovida(null); await cargar(); }} onCerrar={() => setMovida(null)} />
       )}
 
       <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
@@ -427,12 +431,27 @@ function RendicionHonorarios({ rendicion, id, cargar }) {
   );
 }
 
+// Aviso después de mover la rendición, con la opción de deshacer
+function AvisoMovida({ movida, onDeshecho, onCerrar }) {
+  const [error, setError] = useState('');
+  const r = movida.rendiciones[0];
+  return (
+    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: '#e8f5e9', border: '1px solid #b7dfba', color: '#1b5e20', borderRadius: 8, padding: '8px 12px', marginBottom: 16, fontSize: 13 }}>
+      <span>{error || `Listo: ${r.antes} de ${r.proyecto_origen} ahora es ${r.despues} de ${movida.proyecto.nombre}.`}</span>
+      <Boton variante="secundario" style={{ padding: '2px 10px', fontSize: 12, marginLeft: 'auto' }}
+        onClick={async () => { try { await deshacerMovimiento(movida); await onDeshecho(); } catch (err) { setError(`No se pudo deshacer: ${err.message}`); } }}>Deshacer</Boton>
+      <button type="button" onClick={onCerrar} aria-label="Cerrar" style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 15, color: '#1b5e20' }}>×</button>
+    </div>
+  );
+}
+
 // ── Rendición de Obra (comprobantes) ─────────────────────────────────────────
 export default function RendicionDetalle() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { rendicion, cargando, error, agregarComprobante, actualizarComprobante, eliminarComprobante, cargar } = useRendicion(id);
   const [moverAbierto, setMoverAbierto] = useState(false);
+  const [movida, setMovida] = useState(null);
   const [modal, setModal] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
@@ -490,7 +509,10 @@ export default function RendicionDetalle() {
       </div>
       {moverAbierto && (
         <ModalMoverRendiciones ids={[id]} proyectoActualId={rendicion.proyecto_id} onCerrar={() => setMoverAbierto(false)}
-          onMovidas={async () => { setMoverAbierto(false); await cargar(); }} />
+          onMovidas={async (r) => { setMoverAbierto(false); setMovida(r); await cargar(); }} />
+      )}
+      {movida && (
+        <AvisoMovida movida={movida} onDeshecho={async () => { setMovida(null); await cargar(); }} onCerrar={() => setMovida(null)} />
       )}
 
       <AlertaError mensaje={errorAccion} onCerrar={() => setErrorAccion('')} />
