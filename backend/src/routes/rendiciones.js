@@ -553,6 +553,18 @@ router.get('/:id/pdf', async (req, res) => {
   doc.fontSize(10).font('Helvetica').fillColor('#000').text(fmtFecha(rendicion.fecha), margenIzq, doc.y);
   doc.moveDown(0.8);
 
+  // Las rendiciones de honorarios (RHDT, RHP…) no tienen comprobantes: muestran sus
+  // rendiciones base, el % de honorarios y la distribución por socio, igual que en pantalla.
+  if (rendicion.es_honorarios) {
+    try {
+      await dibujarHonorarios(doc, rendicion, { margenIzq, anchoTotal, fmtMonto, fmtFecha });
+    } catch (err) {
+      console.error('Error armando PDF de honorarios:', err);
+      doc.fillColor('#c00000').fontSize(11).text('No se pudo armar el detalle de honorarios. Probá de nuevo o avisá.', margenIzq, doc.y + 10);
+    }
+    return doc.end();
+  }
+
   const porMoneda = { ARS: [], USD: [] };
   comprobantes.forEach(c => { porMoneda[c.moneda]?.push(c); });
   const paletaColores = ['#dbe9f5', '#fce4d6', '#e2efda', '#fff2cc', '#d9d2e9', '#f4cccc', '#d0e0e3', '#fce5cd'];
@@ -626,6 +638,96 @@ router.get('/:id/pdf', async (req, res) => {
 });
 
 // ── Honorarios DT/HP ──────────────────────────────────────────────────────────
+
+// Cuerpo del PDF de una rendición de honorarios: rendiciones base, cálculo del
+// honorario y distribución entre socios.
+async function dibujarHonorarios(doc, rendicion, { margenIzq, anchoTotal, fmtMonto, fmtFecha }) {
+  const { rows: bases } = await query(
+    `SELECT r.tipo, r.numero, r.fecha, p.nombre AS proyecto_nombre,
+            COALESCE((SELECT SUM(rc.monto_neto) FROM rendicion_comprobantes rc WHERE rc.rendicion_id = r.id AND rc.moneda = 'ARS'), 0) AS neto_ars,
+            COALESCE((SELECT SUM(rc.monto_total) FROM rendicion_comprobantes rc WHERE rc.rendicion_id = r.id AND rc.moneda = 'ARS'), 0) AS total_ars
+     FROM rendicion_honorarios_base rhb
+     JOIN rendiciones r ON r.id = rhb.rendicion_base_id
+     JOIN proyectos p ON p.id = r.proyecto_id
+     WHERE rhb.rendicion_id = $1 ORDER BY r.tipo, r.numero`, [rendicion.id]);
+  const { rows: socios } = await query(
+    `SELECT * FROM rendicion_honorarios_socios WHERE rendicion_id = $1 ORDER BY orden ASC`, [rendicion.id]);
+
+  const altoFila = 20;
+  let y = doc.y + 4;
+  const finDePagina = doc.page.height - 50;
+  const saltoSiHaceFalta = (alto) => { if (y + alto > finDePagina) { doc.addPage(); y = 35; } };
+
+  // Tabla genérica: columnas { label, w, align }, filas de textos, fila final opcional en negrita
+  const tabla = (titulo, columnas, filas, filaTotal) => {
+    saltoSiHaceFalta(30 + altoFila * 2);
+    doc.fillColor('#000').fontSize(11).font('Helvetica-Bold').text(titulo, margenIzq, y);
+    y += 18;
+    let x = margenIzq;
+    const xs = columnas.map(c => { const v = x; x += c.w; return v; });
+    const encabezado = () => {
+      doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke('#404040', '#404040');
+      columnas.forEach((c, i) => doc.fillColor('#fff').fontSize(8).font('Helvetica-Bold')
+        .text(c.label, xs[i] + 6, y + 6, { width: c.w - 12, align: c.align || 'left' }));
+      y += altoFila;
+    };
+    encabezado();
+    filas.forEach((f, n) => {
+      if (y + altoFila > finDePagina) { doc.addPage(); y = 35; encabezado(); }
+      doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke(n % 2 ? '#f5f5f5' : '#fff', '#ccc');
+      columnas.forEach((c, i) => doc.fillColor('#000').fontSize(9).font(i === 0 ? 'Helvetica-Bold' : 'Helvetica')
+        .text(String(f[i] ?? ''), xs[i] + 6, y + 6, { width: c.w - 12, align: c.align || 'left', lineBreak: false, ellipsis: true }));
+      y += altoFila;
+    });
+    if (filaTotal) {
+      saltoSiHaceFalta(altoFila);
+      doc.rect(margenIzq, y, anchoTotal, altoFila).fillAndStroke('#d9d9d9', '#bbb');
+      columnas.forEach((c, i) => doc.fillColor('#000').fontSize(9).font('Helvetica-Bold')
+        .text(String(filaTotal[i] ?? ''), xs[i] + 6, y + 6, { width: c.w - 12, align: c.align || 'left', lineBreak: false }));
+      y += altoFila;
+    }
+    y += 16;
+  };
+
+  // 1) Rendiciones base
+  const totalBase = bases.reduce((s, b) => s + Number(b.total_ars), 0);
+  if (bases.length) {
+    const resto = anchoTotal - 110 - 90 - 150 - 150;
+    tabla('Rendiciones base',
+      [{ label: 'Rendición', w: 110 }, { label: 'Proyecto', w: resto }, { label: 'Fecha', w: 90, align: 'right' },
+       { label: 'Neto', w: 150, align: 'right' }, { label: 'Subtotal', w: 150, align: 'right' }],
+      bases.map(b => [`${b.tipo}${b.numero}`, b.proyecto_nombre, fmtFecha(b.fecha), fmtMonto(b.neto_ars, 'ARS'), fmtMonto(b.total_ars, 'ARS')]),
+      ['', '', '', 'TOTAL', fmtMonto(totalBase, 'ARS')]);
+  } else {
+    doc.fillColor('#666').fontSize(10).font('Helvetica').text('Sin rendiciones base.', margenIzq, y);
+    y += 24;
+  }
+
+  // 2) Cálculo del honorario
+  const pct = Number(rendicion.porcentaje_honorarios || 0);
+  const honorario = totalBase * pct / 100;
+  saltoSiHaceFalta(50);
+  doc.rect(margenIzq, y, anchoTotal, 34).fillAndStroke('#eef2fa', '#c7d2fe');
+  doc.fillColor('#000').fontSize(11).font('Helvetica')
+    .text(`Honorarios VJV: ${fmtMonto(totalBase, 'ARS')} × ${pct.toLocaleString('es-AR', { maximumFractionDigits: 2 })}% = `, margenIzq + 10, y + 11, { continued: true })
+    .font('Helvetica-Bold').text(fmtMonto(honorario, 'ARS'));
+  y += 50;
+
+  // 3) Distribución entre socios
+  if (socios.length) {
+    const totPct = socios.reduce((s, x) => s + Number(x.porcentaje), 0);
+    const totNeto = socios.reduce((s, x) => s + Number(x.monto_neto), 0);
+    const totIva = socios.reduce((s, x) => s + Number(x.monto_iva), 0);
+    const totTotal = socios.reduce((s, x) => s + Number(x.monto_total), 0);
+    const resto = anchoTotal - 80 - 150 - 130 - 150;
+    tabla('Distribución de honorarios',
+      [{ label: 'Nombre / Factura', w: resto }, { label: '%', w: 80, align: 'right' }, { label: 'Neto', w: 150, align: 'right' },
+       { label: 'IVA', w: 130, align: 'right' }, { label: 'Subtotal', w: 150, align: 'right' }],
+      socios.map(x => [x.nombre, `${Number(x.porcentaje).toLocaleString('es-AR', { maximumFractionDigits: 2 })}%`,
+        fmtMonto(x.monto_neto, 'ARS'), x.aplica_iva ? fmtMonto(x.monto_iva, 'ARS') : '—', fmtMonto(x.monto_total, 'ARS')]),
+      ['Total', `${totPct.toLocaleString('es-AR', { maximumFractionDigits: 2 })}%`, fmtMonto(totNeto, 'ARS'), fmtMonto(totIva, 'ARS'), fmtMonto(totTotal, 'ARS')]);
+  }
+}
 
 router.get('/:id/honorarios', async (req, res) => {
   const { rows: bases } = await query(
