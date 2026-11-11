@@ -130,7 +130,7 @@ router.get('/mis-liquidaciones', async (req, res) => {
 // ── Exportaciones ──────────────────────────────────────────────────────────────
 // Usan el mismo criterio de costo que el resto de la app (utils/costoHoras.js):
 // horas liquidadas a la tarifa de su liquidación + su parte del monotributo de esa
-// liquidación; horas sin liquidar a la tarifa actual del dibujante, sin monotributo.
+// liquidación; horas sin liquidar a la tarifa actual y con el monotributo mensual actual (estimado).
 // '2026-10-05' → '05/10/2026' (sin pasar por Date, para no correr el día por zona horaria)
 const fechaAR = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
 
@@ -210,7 +210,7 @@ router.get('/exportar/excel', auth.soloAdmin, async (req, res) => {
 
   ws.addRow({});
   ws.addRow({ dibujante: textoPeriodo(req.query.desde, req.query.hasta) });
-  ws.addRow({ dibujante: 'Horas liquidadas: tarifa y monotributo de su liquidación. Pendientes: tarifa actual, sin monotributo.' });
+  ws.addRow({ dibujante: 'Horas liquidadas: tarifa y monotributo de su liquidación. Pendientes: tarifa actual y monotributo mensual actual repartido por horas (estimado).' });
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="horas_dibujantes.xlsx"');
@@ -339,12 +339,12 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
       y += 16;
     });
 
-    // Monotributo: la parte que corresponde a las horas liquidadas de lo filtrado
+    // Monotributo: de las liquidaciones, o estimado si hay horas sin liquidar
     if (g.monotributo > 0) {
       if (y > 750) { doc.addPage(); y = 40; }
       doc.rect(40, y, anchoPagina, 16).fill('#f0f4ff');
       doc.fillColor('#0d47a1').fontSize(9).font('Helvetica-Oblique');
-      doc.text('Monotributo (parte de las liquidaciones)', 48, y + 3, { width: 300 });
+      doc.text(g.horasPendientes > 0 ? 'Monotributo *' : 'Monotributo (parte de las liquidaciones)', 48, y + 3, { width: 300 });
       doc.font('Helvetica-Bold').fillColor('#0d47a1');
       doc.text(moneyFmt(g.monotributo), 480, y + 3, { width: 95, align: 'right' });
       doc.font('Helvetica');
@@ -370,7 +370,7 @@ router.get('/exportar/pdf', auth.soloAdmin, async (req, res) => {
   if (hayPendientes) {
     if (doc.y > 760) doc.addPage();
     doc.fontSize(8).fillColor('#666').font('Helvetica-Oblique').text(
-      '* Incluye horas sin liquidar, valuadas a la tarifa actual del dibujante y sin monotributo (estimado hasta que se liquiden).',
+      '* Incluye horas sin liquidar, valuadas a la tarifa actual del dibujante más su monotributo mensual actual repartido por horas (estimado hasta que se liquiden).',
       40, doc.y, { width: anchoPagina }
     );
   }

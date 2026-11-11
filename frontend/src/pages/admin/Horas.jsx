@@ -84,13 +84,14 @@ function TablaResumen({ resumen }) {
   const porDibujante = {};
   resumen.forEach(r => {
     if (!porDibujante[r.dibujante_id]) {
-      porDibujante[r.dibujante_id] = { nombre: r.dibujante_nombre, tarifa_actual: r.tarifa_actual, proyectos: [], horas: 0, monotributo: 0, costo: 0 };
+      porDibujante[r.dibujante_id] = { nombre: r.dibujante_nombre, tarifa_actual: r.tarifa_actual, proyectos: [], horas: 0, monotributo: 0, costo: 0, pendientes: 0 };
     }
     const d = porDibujante[r.dibujante_id];
     d.proyectos.push(r);
     d.horas += Number(r.horas_totales);
     d.monotributo += Number(r.monotributo || 0);
     d.costo += Number(r.costo_total);
+    d.pendientes += Number(r.horas_pendientes || 0);
   });
   const t = totalesResumen(resumen);
   return (
@@ -123,7 +124,7 @@ function TablaResumen({ resumen }) {
                 {d.monotributo > 0 && (
                   <tr style={{ borderBottom: '1px solid #e0e0e0', background: '#f0f4ff' }}>
                     <td style={{ padding: '8px 16px', color: '#0d47a1', fontWeight: 500 }}>Monotributo</td>
-                    <td colSpan={2} style={{ padding: '8px 16px', color: '#666', fontSize: '12px' }}>parte de las liquidaciones</td>
+                    <td colSpan={2} style={{ padding: '8px 16px', color: '#666', fontSize: '12px' }}>{d.pendientes > 0 ? <>estimado con el monotributo mensual actual <span style={{ color: '#f57f17' }}>*</span></> : 'parte de las liquidaciones'}</td>
                     <td style={{ padding: '8px 16px', textAlign: 'right', fontWeight: 600, color: '#0d47a1' }}>{fmt(d.monotributo)}</td>
                   </tr>
                 )}
@@ -134,7 +135,7 @@ function TablaResumen({ resumen }) {
         <BarraTotal horas={t.horas} costo={t.costoTotal} />
         {t.horasPendientes > 0 && (
           <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
-            <span style={{ color: '#f57f17' }}>*</span> Incluye horas sin liquidar, valuadas a la tarifa actual del dibujante y sin monotributo (estimado hasta que se liquiden).
+            <span style={{ color: '#f57f17' }}>*</span> Incluye horas sin liquidar, valuadas a la tarifa actual del dibujante más su monotributo mensual actual repartido por horas (estimado hasta que se liquiden).
           </p>
         )}
       </div>
