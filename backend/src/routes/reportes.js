@@ -443,7 +443,7 @@ router.get('/proyecto/:id/pdf', async (req, res) => {
     .text('Costo = horas × tarifa de la liquidación + parte proporcional del monotributo de esa liquidación.', margen, doc.y, { width: ancho });
   if (horas.some(h => !h.liquidada)) {
     doc.moveDown(0.3).fillColor('#999').fontSize(8).font('Helvetica')
-      .text('* Horas sin liquidar: valuadas a la tarifa actual del dibujante (estimado, sin monotributo). Las liquidadas, a la tarifa de su liquidación más su parte del monotributo.', margen, doc.y, { width: ancho });
+      .text('* Horas sin liquidar: valuadas a la tarifa actual del dibujante más su monotributo mensual actual (estimado). Las liquidadas, a la tarifa de su liquidación más su parte del monotributo.', margen, doc.y, { width: ancho });
   }
 
   doc.end();
