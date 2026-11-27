@@ -6,6 +6,7 @@ import { useIngresos } from '../../hooks/useIngresos';
 import { useEgresos, useDestinatarios } from '../../hooks/useEgresos';
 import { FormIngreso } from './Ingresos';
 import { FormEgreso } from './Egresos';
+import ModalImportarEgresos from './ModalImportarEgresos';
 import { get } from '../../lib/api';
 import {
   EncabezadoSeccion, Boton, Tabla, Fila, Celda, Badge,
@@ -19,6 +20,7 @@ const CATEGORIAS_EGRESO = [
   { value: 'impuestos',  label: 'Impuestos' },
   { value: 'generales',  label: 'Gastos generales' },
   { value: 'dibujantes', label: 'Dibujantes' },
+  { value: 'viaticos',   label: 'Viáticos' },
   { value: 'extraccion_socio', label: 'Extracción socio' },
 ];
 const CAT_COLORES = {
@@ -26,6 +28,7 @@ const CAT_COLORES = {
   impuestos:  { bg: '#fff8e1', color: '#f57f17' },
   generales:  { bg: '#f3e5f5', color: '#4a148c' },
   dibujantes: { bg: '#e8f5e9', color: '#1b5e20' },
+  viaticos:   { bg: '#e0f2f1', color: '#00695c' },
   extraccion_socio: { bg: '#fce4ec', color: '#880e4f' },
 };
 
@@ -127,7 +130,7 @@ export default function MovimientosFinancieros() {
   const filtrosEgresos  = { moneda: filtros.moneda, desde: periodo.desde, hasta: periodo.hasta, categoria: filtros.categoria };
 
   const { ingresos, cargando: cargandoIng, error: errorIng, crear: crearIngreso, actualizar: actualizarIngreso, eliminar: eliminarIngreso } = useIngresos(filtrosIngresos);
-  const { egresos, cargando: cargandoEgr, error: errorEgr, crear: crearEgreso, actualizar: actualizarEgreso, eliminar: eliminarEgreso } = useEgresos(filtrosEgresos);
+  const { egresos, cargando: cargandoEgr, error: errorEgr, crear: crearEgreso, actualizar: actualizarEgreso, eliminar: eliminarEgreso, cargar: recargarEgresos } = useEgresos(filtrosEgresos);
   const { destinatarios, crear: crearDestinatario } = useDestinatarios();
 
   const cargando = cargandoIng || cargandoEgr;
@@ -201,6 +204,7 @@ export default function MovimientosFinancieros() {
         accion={
           <div style={{ display: 'flex', gap: '8px' }}>
             <Boton variante="secundario" onClick={() => setModal('crear-ingreso')}>+ Ingreso</Boton>
+            <Boton variante="secundario" onClick={() => setModal('importar-egresos')}>Importar planilla</Boton>
             <Boton onClick={() => setModal('crear-egreso')}>+ Egreso</Boton>
           </div>
         }
@@ -395,6 +399,10 @@ export default function MovimientosFinancieros() {
             onNuevoDestinatario={crearDestinatario} onGuardar={handleGuardarEgreso} onCancelar={cerrarModal}
             guardando={guardando} errorServidor={errorAccion} />
         </Modal>
+      )}
+
+      {modal === 'importar-egresos' && (
+        <ModalImportarEgresos onCerrar={cerrarModal} onImportado={recargarEgresos} />
       )}
 
       {/* Eliminar */}

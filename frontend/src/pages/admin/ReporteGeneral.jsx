@@ -11,8 +11,8 @@ const fmt = (n, moneda = 'ARS') =>
     : `$ ${Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtH = (h) => `${Number(h || 0).toFixed(1)} h`;
 
-const CAT_LABELS = { servicios: 'Servicios', impuestos: 'Impuestos', generales: 'Gastos generales', dibujantes: 'Dibujantes' };
-const CAT_COLOR  = { servicios: '#0d47a1', impuestos: '#f57f17', generales: '#4a148c', dibujantes: '#1b5e20' };
+const CAT_LABELS = { servicios: 'Servicios', impuestos: 'Impuestos', generales: 'Gastos generales', dibujantes: 'Dibujantes', viaticos: 'Viáticos', extraccion_socio: 'Extracción socio' };
+const CAT_COLOR  = { servicios: '#0d47a1', impuestos: '#f57f17', generales: '#4a148c', dibujantes: '#1b5e20', viaticos: '#00695c', extraccion_socio: '#880e4f' };
 
 function BarraHorizontal({ valor, maximo, color }) {
   const pct = maximo > 0 ? Math.max(0, Math.min(100, (valor / maximo) * 100)) : 0;

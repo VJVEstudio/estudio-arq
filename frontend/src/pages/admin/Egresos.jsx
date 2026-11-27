@@ -13,6 +13,7 @@ const CATEGORIAS = [
   { value: 'impuestos',  label: 'Impuestos' },
   { value: 'generales',  label: 'Gastos generales' },
   { value: 'dibujantes', label: 'Dibujantes' },
+  { value: 'viaticos',   label: 'Viáticos' },
   { value: 'extraccion_socio', label: 'Extracción socio' },
 ];
 const TIPOS_DEST = [
@@ -26,6 +27,7 @@ const CAT_COLORES = {
   impuestos:  { bg: '#fff8e1', color: '#f57f17' },
   generales:  { bg: '#f3e5f5', color: '#4a148c' },
   dibujantes: { bg: '#e8f5e9', color: '#1b5e20' },
+  viaticos:   { bg: '#e0f2f1', color: '#00695c' },
   extraccion_socio: { bg: '#fce4ec', color: '#880e4f' },
 };
 const fmt = (n, moneda = 'ARS') =>

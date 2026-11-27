@@ -3,6 +3,7 @@ const { query, pool } = require('../db');
 const auth = require('../middleware/auth');
 const { obtenerCotizacionOficial } = require('../utils/cotizacion');
 const { rutaOcr } = require('../utils/ocrUpload');
+const importar = require('../utils/importarEgresos');
 
 const router = express.Router();
 router.use(auth.verificar, auth.soloAdmin);
@@ -10,6 +11,8 @@ router.use(auth.verificar, auth.soloAdmin);
 // Categoría para retiros de un socio desde la cuenta del estudio: no es un gasto,
 // es plata que se lleva ese socio (el balance lo trata como tal).
 const EXTRACCION = 'extraccion_socio';
+// Categorías agregadas después de crear la tabla: si la base las limita, se suman solas
+const CATEGORIAS_NUEVAS = [EXTRACCION, 'viaticos'];
 
 // Si la base limita las categorías (tipo enum o restricción CHECK), suma la nueva.
 // Se hace una sola vez; si falla, se registra y la app sigue funcionando.
@@ -30,26 +33,27 @@ function asegurarCategorias() {
         `SELECT data_type, udt_name FROM information_schema.columns
          WHERE table_schema = 'public' AND table_name = 'egresos' AND column_name = 'categoria'`);
       if (col?.data_type === 'USER-DEFINED') {
-        await query(`ALTER TYPE "${col.udt_name}" ADD VALUE IF NOT EXISTS '${EXTRACCION}'`);
+        for (const v of CATEGORIAS_NUEVAS) await query(`ALTER TYPE "${col.udt_name}" ADD VALUE IF NOT EXISTS '${v}'`);
       }
       const { rows: checks } = await query(
         `SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
          WHERE conrelid = 'public.egresos'::regclass AND contype = 'c'`);
       for (const c of checks) {
         const soloLista = /categoria/.test(c.def) && /= ANY|IN \(/i.test(c.def) && !/ AND | OR /i.test(c.def);
-        if (soloLista && !c.def.includes(EXTRACCION)) {
-          const valores = [...new Set([...(c.def.match(/'([^']+)'/g) || []).map(v => v.slice(1, -1)), EXTRACCION])];
+        const faltan = CATEGORIAS_NUEVAS.filter(v => !c.def.includes(`'${v}'`));
+        if (soloLista && faltan.length) {
+          const valores = [...new Set([...(c.def.match(/'([^']+)'/g) || []).map(v => v.slice(1, -1)), ...faltan])];
           await query(
             `ALTER TABLE egresos DROP CONSTRAINT "${c.conname}",
                ADD CONSTRAINT "${c.conname}" CHECK (categoria IN (${valores.map(v => `'${v.replace(/'/g, "''")}'`).join(', ')}))`);
-          console.log(`Categoría ${EXTRACCION} agregada a la restricción ${c.conname}`);
+          console.log(`Categorías ${faltan.join(', ')} agregadas a la restricción ${c.conname}`);
         }
       }
       errorEsquema = null;
     })().catch(err => {
       errorEsquema = err.message;
       categoriasListas = null; // se reintenta en el próximo pedido
-      console.error('No se pudo preparar la tabla de egresos para extracciones:', err.message);
+      console.error('No se pudo preparar la tabla de egresos (categorías nuevas):', err.message);
     });
   }
   return categoriasListas;
@@ -118,6 +122,65 @@ router.get('/resumen', async (req, res) => {
     params
   );
   res.json(rows);
+});
+
+// Importar egresos desde una planilla: primero vista previa, después confirmar
+router.post('/importar/vista-previa', importar.subida, async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Falta el archivo' });
+    const crudas = await importar.leerPlanilla(req.file.buffer);
+    if (!crudas.length) return res.status(400).json({ error: 'La planilla no tiene filas con datos' });
+    res.json(await importar.resolverFilas(crudas));
+  } catch (err) {
+    console.error('Error leyendo planilla de egresos:', err);
+    res.status(400).json({ error: err.message || 'No se pudo leer la planilla' });
+  }
+});
+
+router.post('/importar', async (req, res) => {
+  const crudas = Array.isArray(req.body?.filas) ? req.body.filas : [];
+  if (!crudas.length) return res.status(400).json({ error: 'No hay filas para importar' });
+  const { filas } = await importar.resolverFilas(crudas);
+  const conError = filas.filter(f => f.errores.length);
+  if (conError.length) {
+    return res.status(400).json({ error: `Hay ${conError.length} fila(s) con errores; revisá la vista previa` });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const destCreados = {};
+    let creados = 0;
+    for (const f of filas) {
+      let destinatarioId = f.destinatario_id;
+      if (!destinatarioId) {
+        const clave = importar.normalizar(f.destinatario_nombre);
+        if (!destCreados[clave]) {
+          const { rows: [d] } = await client.query(
+            `INSERT INTO destinatarios (nombre, tipo) VALUES ($1, 'otro') RETURNING id`, [f.destinatario_nombre]);
+          destCreados[clave] = d.id;
+        }
+        destinatarioId = destCreados[clave];
+      }
+      const cotizacion = f.moneda === 'USD' ? await obtenerCotizacionOficial(f.fecha) : null;
+      const { rows: [e] } = await client.query(
+        `INSERT INTO egresos
+           (destinatario_id, proyecto_id, categoria, monto, moneda, pagado_por_estudio, socio_id,
+            fecha, descripcion, cotizacion_dolar)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [destinatarioId, f.proyecto_id, f.categoria, f.monto, f.moneda,
+         f.pagado_por_estudio, f.pagado_por_estudio ? null : f.socio_id, f.fecha, f.descripcion || null, cotizacion]);
+      await client.query(`SELECT distribuir_egreso($1)`, [e.id]);
+      creados++;
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ creados, destinatarios_nuevos: Object.keys(destCreados).length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error importando egresos:', err);
+    res.status(500).json({ error: mensajeError('Error al importar los egresos', err) });
+  } finally {
+    client.release();
+  }
 });
 
 router.get('/:id', async (req, res) => {
